@@ -1,0 +1,17 @@
+﻿{% extends "admin/change_form.html" %}
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    @media print {
+      .object-tools { display: none !important; }
+    }
+  </style>
+{% endblock %}
+{% block object-tools-items %}
+  {{ block.super }}
+  {% if original and adminform and adminform.model_admin.print_url_name %}
+    <li>
+      <a class="button" href="{% url adminform.model_admin.print_url_name original.pk %}" target="_blank">Imprimir</a>
+    </li>
+  {% endif %}
+{% endblock %}

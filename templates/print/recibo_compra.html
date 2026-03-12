@@ -1,0 +1,65 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Recibo de Compra</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 20px; }
+    .header { display: flex; justify-content: space-between; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
+    .empresa h1 { margin: 0; font-size: 18px; }
+    .doc h2 { margin: 0; font-size: 16px; text-align: right; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #ccc; padding: 6px; }
+    th { background: #f3f3f3; text-align: left; }
+    .num { text-align: right; }
+    .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; }
+    .firma { margin-top: 24px; }
+    .no-print { margin-bottom: 10px; }
+    @media print {
+      .no-print { display: none; }
+      @page { size: letter; margin: 0.5in; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <button onclick="window.print()">Imprimir</button>
+  </div>
+  <div class="header">
+    <div class="empresa">
+      {% if empresa %}
+        <h1>{{ empresa.nombre_empresa }}</h1>
+        <div>RIF: {{ empresa.rif }}</div>
+        <div>{{ empresa.direccion }}</div>
+        <div>Tel: {{ empresa.telefono }}</div>
+        {% if empresa.email %}<div>Email: {{ empresa.email }}</div>{% endif %}
+      {% else %}
+        <h1>LacteOps</h1>
+        <div>Empresa no configurada</div>
+      {% endif %}
+    </div>
+    <div class="doc">
+      <h2>Recibo de Compra</h2>
+      <div>ID: {{ obj.id }}</div>
+      <div>Fecha: {{ obj.fecha }}</div>
+    </div>
+  </div>
+  <table>
+    <tr><th>Factura</th><td>{{ obj.factura.numero }}</td></tr>
+    <tr><th>Proveedor</th><td>{{ obj.factura.proveedor }}</td></tr>
+    <tr><th>Monto</th><td class="num">{{ obj.monto }}</td></tr>
+    <tr><th>Moneda</th><td>{{ obj.moneda }}</td></tr>
+    <tr><th>Tasa Cambio</th><td class="num">{{ obj.tasa_cambio }}</td></tr>
+    <tr><th>Monto USD</th><td class="num">{{ obj.monto_usd }}</td></tr>
+    <tr><th>Medio Pago</th><td>{{ obj.medio_pago }}</td></tr>
+    <tr><th>Cuenta Origen</th><td>{{ obj.cuenta_origen }}</td></tr>
+    <tr><th>Referencia</th><td>{{ obj.referencia }}</td></tr>
+  </table>
+  <div class="footer">
+    {% if empresa and empresa.pie_documento %}
+      <div>{{ empresa.pie_documento }}</div>
+    {% endif %}
+    <div class="firma">Firma y nombre: ____________________________</div>
+  </div>
+</body>
+</html>
