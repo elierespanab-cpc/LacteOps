@@ -1,0 +1,62 @@
+[
+  {
+    "model": "core.secuencia",
+    "pk": 1,
+    "fields": {
+      "tipo_documento": "VTA",
+      "ultimo_numero": 0,
+      "prefijo": "VTA-",
+      "digitos": 4
+    }
+  },
+  {
+    "model": "core.secuencia",
+    "pk": 2,
+    "fields": {
+      "tipo_documento": "COM",
+      "ultimo_numero": 0,
+      "prefijo": "COM-",
+      "digitos": 4
+    }
+  },
+  {
+    "model": "core.secuencia",
+    "pk": 3,
+    "fields": {
+      "tipo_documento": "INV",
+      "ultimo_numero": 0,
+      "prefijo": "INV-",
+      "digitos": 4
+    }
+  },
+  {
+    "model": "core.secuencia",
+    "pk": 4,
+    "fields": {
+      "tipo_documento": "PRO",
+      "ultimo_numero": 0,
+      "prefijo": "PRO-",
+      "digitos": 4
+    }
+  },
+  {
+    "model": "core.secuencia",
+    "pk": 5,
+    "fields": {
+      "tipo_documento": "TES",
+      "ultimo_numero": 0,
+      "prefijo": "TES-",
+      "digitos": 4
+    }
+  },
+  {
+    "model": "core.secuencia",
+    "pk": 6,
+    "fields": {
+      "tipo_documento": "APC",
+      "ultimo_numero": 0,
+      "prefijo": "APC-",
+      "digitos": 4
+    }
+  }
+]

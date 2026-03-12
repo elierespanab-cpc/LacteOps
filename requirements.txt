@@ -1,0 +1,6 @@
+﻿django>=4.2
+django-jazzmin
+waitress
+psycopg2-binary
+pillow
+python-decouple

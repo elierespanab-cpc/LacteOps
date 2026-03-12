@@ -1,0 +1,47 @@
+[
+    {
+        "model": "almacen.unidadmedida",
+        "pk": 1,
+        "fields": {
+            "nombre": "Kilogramo",
+            "simbolo": "kg",
+            "activo": true
+        }
+    },
+    {
+        "model": "almacen.unidadmedida",
+        "pk": 2,
+        "fields": {
+            "nombre": "Gramo",
+            "simbolo": "g",
+            "activo": true
+        }
+    },
+    {
+        "model": "almacen.unidadmedida",
+        "pk": 3,
+        "fields": {
+            "nombre": "Litro",
+            "simbolo": "L",
+            "activo": true
+        }
+    },
+    {
+        "model": "almacen.unidadmedida",
+        "pk": 4,
+        "fields": {
+            "nombre": "Mililitro",
+            "simbolo": "ml",
+            "activo": true
+        }
+    },
+    {
+        "model": "almacen.unidadmedida",
+        "pk": 5,
+        "fields": {
+            "nombre": "Unidad",
+            "simbolo": "unid",
+            "activo": true
+        }
+    }
+]
