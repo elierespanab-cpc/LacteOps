@@ -1,8 +1,9 @@
 import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum, F, Q, DecimalField
+from django.core.exceptions import PermissionDenied
+from django.db.models import Sum, F, Value, DecimalField
 from django.db.models.functions import Coalesce
 
 from apps.core.models import ConfiguracionEmpresa
@@ -13,8 +14,18 @@ from apps.bancos.models import CuentaBancaria
 from apps.almacen.models import Producto
 from apps.compras.models import GastoServicio as Gs
 
+
+def _check_reporte_perm(request):
+    """B9 — Verifica que el usuario tiene permiso de ver reportes."""
+    if request.user.is_superuser:
+        return
+    if not request.user.has_perm('reportes.view_reportelink'):
+        raise PermissionDenied('No tiene permiso para acceder a los reportes.')
+
+
 @login_required
 def reporte_ventas(request):
+    _check_reporte_perm(request)  # B9
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_desde = request.GET.get('fecha_desde')
     fecha_hasta = request.GET.get('fecha_hasta')
@@ -45,12 +56,14 @@ def reporte_ventas(request):
         'agrupar_por_cliente': agrupar_por_cliente,
         'detalles': detalles,
         'clientes': Cliente.objects.all(),
-        'productos': Producto.objects.all(),
+        'productos': Producto.objects.filter(activo=True),
     }
     return render(request, 'reportes/ventas.html', context)
 
+
 @login_required
 def reporte_cxc(request):
+    _check_reporte_perm(request)  # B9
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_corte = request.GET.get('fecha_corte')
     hasta = datetime.datetime.strptime(fecha_corte, "%Y-%m-%d").date() if fecha_corte else datetime.date.today()
@@ -61,15 +74,20 @@ def reporte_cxc(request):
     ).select_related('cliente')
 
     resultados = []
-    totales = {'total': Decimal('0.00'), 'pendiente': Decimal('0.00'), 's_0_30': Decimal('0.00'), 's_31_60': Decimal('0.00'), 's_61_90': Decimal('0.00'), 's_90_plus': Decimal('0.00')}
-    
+    totales = {
+        'total': Decimal('0.00'), 'pendiente': Decimal('0.00'),
+        's_0_30': Decimal('0.00'), 's_31_60': Decimal('0.00'),
+        's_61_90': Decimal('0.00'), 's_90_plus': Decimal('0.00'),
+    }
+
     for fv in facturas:
         cobrado_hasta = sum(c.monto for c in fv.cobros.filter(fecha__lte=hasta)) if hasattr(fv, 'cobros') else Decimal('0.00')
         saldo = fv.total - cobrado_hasta
         if saldo > 0:
             dias_vencida = (hasta - fv.fecha_vencimiento).days if fv.fecha_vencimiento else 0
-            if dias_vencida < 0: dias_vencida = 0
-            
+            if dias_vencida < 0:
+                dias_vencida = 0
+
             saldo_0_30 = saldo if 0 <= dias_vencida <= 30 else Decimal('0.00')
             saldo_31_60 = saldo if 31 <= dias_vencida <= 60 else Decimal('0.00')
             saldo_61_90 = saldo if 61 <= dias_vencida <= 90 else Decimal('0.00')
@@ -82,7 +100,7 @@ def reporte_cxc(request):
                 's_0_30': saldo_0_30,
                 's_31_60': saldo_31_60,
                 's_61_90': saldo_61_90,
-                's_90_plus': saldo_90_plus
+                's_90_plus': saldo_90_plus,
             })
             totales['total'] += fv.total
             totales['pendiente'] += saldo
@@ -99,8 +117,10 @@ def reporte_cxc(request):
     }
     return render(request, 'reportes/cxc.html', context)
 
+
 @login_required
 def reporte_compras(request):
+    _check_reporte_perm(request)  # B9
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_desde = request.GET.get('fecha_desde')
     fecha_hasta = request.GET.get('fecha_hasta')
@@ -131,46 +151,70 @@ def reporte_compras(request):
         'agrupar_por_proveedor': agrupar_por_proveedor,
         'detalles': detalles,
         'proveedores': Proveedor.objects.all(),
-        'productos': Producto.objects.all(),
+        'productos': Producto.objects.filter(activo=True),
     }
     return render(request, 'reportes/compras.html', context)
 
+
 @login_required
 def reporte_cxp(request):
+    """
+    B3 — CxP con pagos parciales: usa annotate + Coalesce para calcular saldo.
+    Filtra facturas APROBADA (no RECIBIDA) porque los pagos van contra APROBADAS.
+    """
+    _check_reporte_perm(request)  # B9
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_corte = request.GET.get('fecha_corte')
     tipo_reporte = request.GET.get('tipo', 'TODOS')
     hasta = datetime.datetime.strptime(fecha_corte, "%Y-%m-%d").date() if fecha_corte else datetime.date.today()
 
     resultados = []
-    totales = {'total': Decimal('0.00'), 'pendiente': Decimal('0.00'), 's_0_30': Decimal('0.00'), 's_31_60': Decimal('0.00'), 's_61_90': Decimal('0.00'), 's_90_plus': Decimal('0.00')}
-    
+    totales = {
+        'total': Decimal('0.00'), 'pendiente': Decimal('0.00'),
+        's_0_30': Decimal('0.00'), 's_31_60': Decimal('0.00'),
+        's_61_90': Decimal('0.00'), 's_90_plus': Decimal('0.00'),
+    }
+
     if tipo_reporte in ['TODOS', 'COMPRAS']:
-        facturas = FacturaCompra.objects.filter(
-            estado='RECIBIDA',
-            fecha__lte=hasta
-        ).select_related('proveedor')
+        # B3 fix: estado APROBADA + Coalesce para pagos parciales
+        facturas = (
+            FacturaCompra.objects
+            .filter(estado='APROBADA', fecha__lte=hasta)
+            .select_related('proveedor')
+            .annotate(
+                total_pagado=Coalesce(
+                    Sum('pagos__monto_usd'),
+                    Value(Decimal('0.00')),
+                    output_field=DecimalField(),
+                )
+            )
+            .annotate(saldo=F('total') - F('total_pagado'))
+            .filter(saldo__gt=0)
+        )
+
         for fv in facturas:
-            pagado_hasta = sum(p.monto_usd for p in fv.pagos.filter(fecha__lte=hasta)) if hasattr(fv, 'pagos') else Decimal('0.00')
-            saldo = fv.total - pagado_hasta
-            if saldo > 0:
-                dias_vencida = (hasta - fv.fecha_vencimiento).days if fv.fecha_vencimiento else 0
-                if dias_vencida < 0: dias_vencida = 0
-                
-                s_0 = saldo if 0 <= dias_vencida <= 30 else Decimal('0.00')
-                s_31 = saldo if 31 <= dias_vencida <= 60 else Decimal('0.00')
-                s_61 = saldo if 61 <= dias_vencida <= 90 else Decimal('0.00')
-                s_90 = saldo if dias_vencida > 90 else Decimal('0.00')
-                
-                resultados.append({
-                    'es_gasto': False,
-                    'documento': fv,
-                    'saldo': saldo,
-                    'dias': dias_vencida,
-                    's_0': s_0, 's_31': s_31, 's_61': s_61, 's_90': s_90
-                })
-                totales['pendiente'] += saldo
-                totales['s_0_30'] += s_0; totales['s_31_60'] += s_31; totales['s_61_90'] += s_61; totales['s_90_plus'] += s_90
+            saldo = Decimal(str(fv.saldo))
+            dias_vencida = (hasta - fv.fecha_vencimiento).days if fv.fecha_vencimiento else 0
+            if dias_vencida < 0:
+                dias_vencida = 0
+
+            s_0 = saldo if 0 <= dias_vencida <= 30 else Decimal('0.00')
+            s_31 = saldo if 31 <= dias_vencida <= 60 else Decimal('0.00')
+            s_61 = saldo if 61 <= dias_vencida <= 90 else Decimal('0.00')
+            s_90 = saldo if dias_vencida > 90 else Decimal('0.00')
+
+            resultados.append({
+                'es_gasto': False,
+                'documento': fv,
+                'saldo': saldo,
+                'dias': dias_vencida,
+                's_0': s_0, 's_31': s_31, 's_61': s_61, 's_90': s_90,
+            })
+            totales['pendiente'] += saldo
+            totales['s_0_30'] += s_0
+            totales['s_31_60'] += s_31
+            totales['s_61_90'] += s_61
+            totales['s_90_plus'] += s_90
 
     if tipo_reporte in ['TODOS', 'GASTOS_SERVICIOS']:
         gastos = GastoServicio.objects.filter(
@@ -178,10 +222,11 @@ def reporte_cxp(request):
             fecha_emision__lte=hasta
         ).select_related('proveedor')
         for gs in gastos:
-            saldo = gs.monto_usd
+            saldo = Decimal(str(gs.monto_usd))
             dias_vencida = (hasta - gs.fecha_vencimiento).days if gs.fecha_vencimiento else 0
-            if dias_vencida < 0: dias_vencida = 0
-            
+            if dias_vencida < 0:
+                dias_vencida = 0
+
             s_0 = saldo if 0 <= dias_vencida <= 30 else Decimal('0.00')
             s_31 = saldo if 31 <= dias_vencida <= 60 else Decimal('0.00')
             s_61 = saldo if 61 <= dias_vencida <= 90 else Decimal('0.00')
@@ -192,10 +237,13 @@ def reporte_cxp(request):
                 'documento': gs,
                 'saldo': saldo,
                 'dias': dias_vencida,
-                's_0': s_0, 's_31': s_31, 's_61': s_61, 's_90': s_90
+                's_0': s_0, 's_31': s_31, 's_61': s_61, 's_90': s_90,
             })
             totales['pendiente'] += saldo
-            totales['s_0_30'] += s_0; totales['s_31_60'] += s_31; totales['s_61_90'] += s_61; totales['s_90_plus'] += s_90
+            totales['s_0_30'] += s_0
+            totales['s_31_60'] += s_31
+            totales['s_61_90'] += s_61
+            totales['s_90_plus'] += s_90
 
     context = {
         'empresa': empresa,
@@ -206,8 +254,10 @@ def reporte_cxp(request):
     }
     return render(request, 'reportes/cxp.html', context)
 
+
 @login_required
 def reporte_produccion(request):
+    _check_reporte_perm(request)  # B9
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_desde = request.GET.get('fecha_desde')
     fecha_hasta = request.GET.get('fecha_hasta')
@@ -230,7 +280,7 @@ def reporte_produccion(request):
                     s.kg_totales = s.cantidad * s.producto.peso_unitario_kg
                 else:
                     s.kg_totales = None
-            
+
             if s.cantidad > 0:
                 s.cu = s.costo_asignado / s.cantidad
             else:
@@ -240,12 +290,14 @@ def reporte_produccion(request):
         'empresa': empresa,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
-        'ordenes': ordenes
+        'ordenes': ordenes,
     }
     return render(request, 'reportes/produccion.html', context)
 
+
 @login_required
 def reporte_gastos(request):
+    _check_reporte_perm(request)  # B9
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_desde = request.GET.get('fecha_desde')
     fecha_hasta = request.GET.get('fecha_hasta')
@@ -265,7 +317,6 @@ def reporte_gastos(request):
     gastos = list(qs.order_by('fecha_emision'))
     total_usd = sum(g.monto_usd for g in gastos)
 
-    # list of unique categorias to render filter properly in template
     all_categorias = set(g.categoria_gasto for g in Gs.objects.all())
 
     context = {
@@ -278,64 +329,113 @@ def reporte_gastos(request):
     }
     return render(request, 'reportes/gastos.html', context)
 
+
 @login_required
 def reporte_capital_trabajo(request):
+    """
+    B4 — Aplica quantize(0.01) a TODOS los totales y subtotales.
+    """
+    _check_reporte_perm(request)  # B9
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_corte = request.GET.get('fecha_corte')
     hasta = datetime.datetime.strptime(fecha_corte, "%Y-%m-%d").date() if fecha_corte else datetime.date.today()
     valorar = request.GET.get('valorar_inventario', 'COSTO')
 
+    def q(valor):
+        """Cuantiza a 2 decimales con ROUND_HALF_UP."""
+        return Decimal(str(valor)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+    # Obtener tasa de cambio para cuentas VES: usar última reexpresión o fallback
+    tasa_ves = Decimal('1.00')
+    try:
+        from apps.bancos.models import PeriodoReexpresado
+        ultimo_periodo = PeriodoReexpresado.objects.order_by('-anio', '-mes').first()
+        if ultimo_periodo:
+            tasa_ves = Decimal(str(ultimo_periodo.tasa_cierre))
+    except Exception:
+        pass
+
     # Activo Corriente: Efectivo
     efectivo = Decimal('0.00')
-    # de apps.almacen.services import convertir_a_usd ya manejado o no usado aqui
-    # Para la tasa de cambio del momento tendriamos que saber la tasa, o usamos las cuentas tal cual estan
-    # o asumimos tasa actual si es balance a la fecha de hoy, pero para la fecha de corte es mas complejo si no teniamos historico.
-    # El prompt dice: "suma saldo_actual de CuentaBancaria activas, convertido a USD". Asume convertir usando alguna tasa o q ya tienen monto_usd historico, no, usar tasa actual/saldo_actual.
-    # Como CuentaBancaria no tiene tasa, usamos `1` para USD y... wait, ¿cómo convertimos VES? No dice, usemos tasa definida en config o fallback 1.
-    # Actually we can skip if we don't know the rate, but usually we should have it. Let's just do sum(saldo) for USD.
     for cta in CuentaBancaria.objects.filter(activa=True):
         if cta.moneda == 'USD':
-            efectivo += cta.saldo_actual
+            efectivo += Decimal(str(cta.saldo_actual))
         else:
-            # without a fixed rate, we'll try to get it if reasonable, fallback 0 or something. Let's assume there's a setting or 1.
-            efectivo += cta.saldo_actual / Decimal('45.00') # TODO: better handling if config has it
+            if tasa_ves > 0:
+                efectivo += Decimal(str(cta.saldo_actual)) / tasa_ves
+    efectivo = q(efectivo)
 
     # Activo Corriente: CxC
     cxc = Decimal('0.00')
     facturas_emitidas = FacturaVenta.objects.filter(estado='EMITIDA', fecha__lte=hasta)
     for f in facturas_emitidas:
-        cobros = sum(c.monto for c in getattr(f, 'cobros').filter(fecha__lte=hasta)) if hasattr(f, 'cobros') else Decimal('0.00')
-        saldo = f.total - cobros
+        cobros = sum(c.monto for c in f.cobros.filter(fecha__lte=hasta))
+        saldo = Decimal(str(f.total)) - Decimal(str(cobros))
         if saldo > 0 and (not f.fecha_vencimiento or f.fecha_vencimiento >= hasta):
             cxc += saldo
-    
+    cxc = q(cxc)
+
     # Activo Corriente: Inventario
     inventario = Decimal('0.00')
-    for prod in Producto.objects.filter(stock_actual__gt=0):
+    for prod in Producto.objects.filter(activo=True, stock_actual__gt=0):
         if valorar == 'VENTA':
             precio = prod.precio_venta if prod.precio_venta else prod.costo_promedio
         else:
             precio = prod.costo_promedio
-        inventario += prod.stock_actual * precio
+        inventario += Decimal(str(prod.stock_actual)) * Decimal(str(precio))
+    inventario = q(inventario)
 
-    activo_corriente = efectivo + cxc + inventario
+    activo_corriente = q(efectivo + cxc + inventario)
 
-    # Pasivo Corriente: CxP
+    # Pasivo Corriente: CxP Compras (APROBADAS con saldo pendiente)
     cxp_compras = Decimal('0.00')
-    facturas_recibidas = FacturaCompra.objects.filter(estado='RECIBIDA', fecha__lte=hasta)
-    for f in facturas_recibidas:
-        pagos = sum(p.monto_usd for p in getattr(f, 'pagos').filter(fecha__lte=hasta)) if hasattr(f, 'pagos') else Decimal('0.00')
-        saldo = f.total - pagos
-        if saldo > 0:
-            cxp_compras += saldo
+    facturas_aprobadas = (
+        FacturaCompra.objects
+        .filter(estado='APROBADA', fecha__lte=hasta)
+        .annotate(
+            total_pagado=Coalesce(
+                Sum('pagos__monto_usd'),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(),
+            )
+        )
+        .annotate(saldo=F('total') - F('total_pagado'))
+        .filter(saldo__gt=0)
+    )
+    for f in facturas_aprobadas:
+        cxp_compras += Decimal(str(f.saldo))
+    cxp_compras = q(cxp_compras)
 
+    # Pasivo Corriente: CxP Gastos
     cxp_gastos = Decimal('0.00')
-    gastos_pendientes = GastoServicio.objects.filter(estado='PENDIENTE', fecha_emision__lte=hasta)
-    for g in gastos_pendientes:
-        cxp_gastos += g.monto_usd
+    for g in GastoServicio.objects.filter(estado='PENDIENTE', fecha_emision__lte=hasta):
+        cxp_gastos += Decimal(str(g.monto_usd))
+    cxp_gastos = q(cxp_gastos)
 
-    pasivo_corriente = cxp_compras + cxp_gastos
-    capital_trabajo = activo_corriente - pasivo_corriente
+    # Pasivo de socios: préstamos activos
+    from datetime import timedelta
+    from apps.socios.models import PrestamoPorSocio
+
+    hoy = datetime.date.today()
+    limite_corriente = hoy + timedelta(days=365)
+
+    prestamos_activos = list(PrestamoPorSocio.objects.filter(estado='ACTIVO'))
+
+    prestamos_corriente = q(sum(
+        Decimal(str(p.monto_usd))
+        for p in prestamos_activos
+        if p.fecha_vencimiento and p.fecha_vencimiento <= limite_corriente
+    ) or Decimal('0.00'))
+
+    prestamos_no_corriente = q(sum(
+        Decimal(str(p.monto_usd))
+        for p in prestamos_activos
+        if not p.fecha_vencimiento or p.fecha_vencimiento > limite_corriente
+    ) or Decimal('0.00'))
+
+    pasivo_corriente = q(cxp_compras + cxp_gastos + prestamos_corriente)
+    capital_neto = q(activo_corriente - pasivo_corriente)
+    capital_trabajo = capital_neto  # alias para compatibilidad con la plantilla
 
     context = {
         'empresa': empresa,
@@ -347,7 +447,11 @@ def reporte_capital_trabajo(request):
         'activo_corriente': activo_corriente,
         'cxp_compras': cxp_compras,
         'cxp_gastos': cxp_gastos,
+        'prestamos_corriente': prestamos_corriente,
+        'prestamos_no_corriente': prestamos_no_corriente,
+        'prestamos_activos': prestamos_activos,
         'pasivo_corriente': pasivo_corriente,
+        'capital_neto': capital_neto,
         'capital_trabajo': capital_trabajo,
     }
     return render(request, 'reportes/capital_trabajo.html', context)

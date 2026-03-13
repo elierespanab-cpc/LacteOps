@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import logging
 
 from django.contrib import admin, messages
@@ -20,6 +20,11 @@ class DetalleFacturaCompraInline(admin.TabularInline):
     model = DetalleFacturaCompra
     extra = 3
     readonly_fields = ("subtotal",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "producto":
+            kwargs["queryset"] = Producto.objects.filter(activo=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 class PagoInline(admin.TabularInline):

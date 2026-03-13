@@ -1,0 +1,415 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.12.8, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\elier\Documents\Desarollos\LacteOps\venv\Scripts\python.exe
+cachedir: .pytest_cache
+django: version: 6.0.3, settings: erp_lacteo.settings.development (from ini)
+rootdir: C:\Users\elier\Documents\Desarollos\LacteOps
+configfile: pytest.ini
+plugins: django-4.12.0
+collecting ... collected 75 items
+
+tests/test_ajustes.py::test_ajuste_positivo_aumenta_stock_y_precio PASSED [  1%]
+tests/test_ajustes.py::test_ajuste_negativo_descuenta_stock PASSED       [  2%]
+tests/test_ajustes.py::test_ajuste_negativo_bloqueado_sin_stock PASSED   [  4%]
+tests/test_ajustes.py::test_ajuste_cantidad_cero_rechazado PASSED        [  5%]
+tests/test_ajustes.py::test_ajuste_crea_un_movimiento PASSED             [  6%]
+tests/test_ajustes.py::test_multiples_ajustes_mantienen_ppm PASSED       [  8%]
+tests/test_ajustes.py::test_ajuste_atomicidad_rollback PASSED            [  9%]
+tests/test_bancos.py::test_movimiento_entrada_aumenta_saldo PASSED       [ 10%]
+tests/test_bancos.py::test_movimiento_salida_descuenta_saldo PASSED      [ 12%]
+tests/test_bancos.py::test_saldo_negativo_bloqueado PASSED               [ 13%]
+tests/test_bancos.py::test_cobro_ves_calcula_usd PASSED                  [ 14%]
+tests/test_bancos.py::test_movimiento_caja_inmutable PASSED              [ 16%]
+tests/test_bancos.py::test_cuenta_inactiva_rechaza_movimientos PASSED    [ 17%]
+tests/test_bancos.py::test_transferencia_exitosa PASSED                  [ 18%]
+tests/test_bancos.py::test_reexpresion_mensual_calcula_variacion FAILED  [ 20%]
+tests/test_bancos.py::test_reexpresion_mensual_idempotente FAILED        [ 21%]
+tests/test_capital_trabajo.py::test_inventario_sin_precio_venta_usa_costo_promedio FAILED [ 22%]
+tests/test_capital_trabajo.py::test_materia_prima_incluida_en_valoracion FAILED [ 24%]
+tests/test_compras.py::test_factura_compra_flujo_completo PASSED         [ 25%]
+tests/test_compras.py::test_aprobar_factura_ya_aprobada PASSED           [ 26%]
+tests/test_compras.py::test_conversion_ves_a_usd PASSED                  [ 28%]
+tests/test_compras.py::test_anular_factura_recibida PASSED               [ 29%]
+tests/test_compras.py::test_anular_factura_aprobada_bloqueado PASSED     [ 30%]
+tests/test_credito.py::test_bloqueo_cliente_con_deuda_vencida FAILED     [ 32%]
+tests/test_credito.py::test_advertencia_no_bloquea_emision FAILED        [ 33%]
+tests/test_credito.py::test_cliente_sin_deuda_vencida_pasa FAILED        [ 34%]
+tests/test_credito.py::test_factura_pagada_no_bloquea FAILED             [ 36%]
+tests/test_credito.py::test_fecha_vencimiento_calculada_correctamente FAILED [ 37%]
+tests/test_credito.py::test_dias_credito_personalizado FAILED            [ 38%]
+tests/test_gastos.py::test_gasto_descuenta_saldo PASSED                  [ 40%]
+tests/test_gastos.py::test_gasto_mayor_saldo_bloqueado PASSED            [ 41%]
+tests/test_gastos.py::test_cobro_ves_calcula_monto_usd PASSED            [ 42%]
+tests/test_gastos.py::test_cobro_sin_cuenta_no_genera_movimiento PASSED  [ 44%]
+tests/test_gastos.py::test_cobro_con_cuenta_aumenta_saldo PASSED         [ 45%]
+tests/test_gastos.py::test_transferencia_ejecutada_no_puede_re_ejecutarse PASSED [ 46%]
+tests/test_gastos.py::test_transferencia_anulacion_genera_inversos PASSED [ 48%]
+tests/test_kardex.py::test_entrada_stock_cero PASSED                     [ 49%]
+tests/test_kardex.py::test_promedio_ponderado_segunda_entrada PASSED     [ 50%]
+tests/test_kardex.py::test_salida_descuenta_stock PASSED                 [ 52%]
+tests/test_kardex.py::test_salida_no_modifica_costo_promedio PASSED      [ 53%]
+tests/test_kardex.py::test_stock_negativo_bloqueado PASSED               [ 54%]
+tests/test_kardex.py::test_entrada_crea_movimiento PASSED                [ 56%]
+tests/test_kardex.py::test_salida_crea_movimiento PASSED                 [ 57%]
+tests/test_kardex.py::test_atomicidad_entrada PASSED                     [ 58%]
+tests/test_listas_precio.py::test_precio_asignado_automaticamente_al_emitir ERROR [ 60%]
+tests/test_listas_precio.py::test_producto_sin_precio_en_lista_bloquea_emision ERROR [ 61%]
+tests/test_listas_precio.py::test_precio_no_aprobado_no_usable ERROR     [ 62%]
+tests/test_listas_precio.py::test_factura_sin_lista_bloquea_emision ERROR [ 64%]
+tests/test_listas_precio.py::test_solo_admin_y_master_aprueban_precios PASSED [ 65%]
+tests/test_numeracion.py::test_secuencia_incremental PASSED              [ 66%]
+tests/test_numeracion.py::test_secuencias_independientes PASSED          [ 68%]
+tests/test_numeracion.py::test_numeracion_no_repite PASSED               [ 69%]
+tests/test_numeracion.py::test_numeracion_no_reutiliza_anulados PASSED   [ 70%]
+tests/test_numeracion.py::test_numeracion_relleno_ceros PASSED           [ 72%]
+tests/test_produccion.py::test_orden_precarga_consumos ERROR             [ 73%]
+tests/test_produccion.py::test_cierre_op_flujo_completo ERROR            [ 74%]
+tests/test_produccion.py::test_cierre_op_stock_insuficiente ERROR        [ 76%]
+tests/test_produccion.py::test_cierre_op_atomico FAILED                  [ 77%]
+tests/test_produccion.py::test_anular_op_abierta ERROR                   [ 78%]
+tests/test_produccion.py::test_anular_op_cerrada_bloqueado ERROR         [ 80%]
+tests/test_produccion.py::test_auditlog_registra_cambio_estado ERROR     [ 81%]
+tests/test_produccion_conjunta.py::test_costo_distribuido_por_valor_mercado PASSED [ 82%]
+tests/test_produccion_conjunta.py::test_subproducto_entra_a_costo_cero PASSED [ 84%]
+tests/test_produccion_conjunta.py::test_orden_sin_producto_principal_no_cierra PASSED [ 85%]
+tests/test_produccion_conjunta.py::test_residuo_redondeo_absorbido PASSED [ 86%]
+tests/test_rbac.py::test_asistente_ventas_no_aprueba_precios PASSED      [ 88%]
+tests/test_rbac.py::test_jefe_produccion_no_aprueba_ajuste_grande PASSED [ 89%]
+tests/test_rbac.py::test_administrador_aprueba_ajuste_grande PASSED      [ 90%]
+tests/test_reexpresion_idempotente.py::test_segunda_ejecucion_mismo_periodo_lanza_error ERROR [ 92%]
+tests/test_ventas.py::test_emitir_factura_descuenta_stock FAILED         [ 93%]
+tests/test_ventas.py::test_emitir_sin_stock_bloqueado FAILED             [ 94%]
+tests/test_ventas.py::test_emitir_idempotente FAILED                     [ 96%]
+tests/test_ventas.py::test_marcar_cobrada_flujo_completo FAILED          [ 97%]
+tests/test_ventas.py::test_marcar_cobrada_saldo_pendiente FAILED         [ 98%]
+tests/test_bancos.py::test_transferencia_atomica PASSED                  [100%]
+
+=================================== ERRORS ====================================
+______ ERROR at setup of test_precio_asignado_automaticamente_al_emitir _______
+file C:\Users\elier\Documents\Desarollos\LacteOps\tests\test_listas_precio.py, line 42
+  @pytest.mark.django_db
+  def test_precio_asignado_automaticamente_al_emitir(lista_general, producto_leche, cliente_limpio, admin_user):
+E       fixture 'cliente_limpio' not found
+>       available fixtures: _dj_autoclear_mailbox, _django_clear_site_cache, _django_db_helper, _django_db_marker, _django_isolate_apps, _django_set_urlconf, _django_setup_unittest, _fail_for_invalid_template_variable, _live_server_helper, _template_string_if_invalid_marker, admin_client, admin_user, assistant_user, async_client, async_rf, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, categoria_lacteos, client, cliente, db, django_assert_max_num_queries, django_assert_num_queries, django_capture_on_commit_callbacks, django_db_blocker, django_db_createdb, django_db_keepdb, django_db_modify_db_settings, django_db_modify_db_settings_parallel_suffix, django_db_modify_db_settings_tox_suffix, django_db_modify_db_settings_xdist_suffix, django_db_reset_sequences, django_db_serialized_rollback, django_db_setup, django_db_use_migrations, django_isolated_apps, django_mail_dnsname, django_mail_patch_dns, django_test_environment, django_user_model, django_username_field, doctest_namespace, lista_general, live_server, mailoutbox, monkeypatch, producto_leche, producto_mp, producto_pt, proveedor, pytestconfig, receta, record_property, record_testsuite_property, record_xml_attribute, recwarn, rf, settings, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, transactional_db, unidad_kg
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+C:\Users\elier\Documents\Desarollos\LacteOps\tests\test_listas_precio.py:42
+_____ ERROR at setup of test_producto_sin_precio_en_lista_bloquea_emision _____
+file C:\Users\elier\Documents\Desarollos\LacteOps\tests\test_listas_precio.py, line 69
+  @pytest.mark.django_db
+  def test_producto_sin_precio_en_lista_bloquea_emision(lista_general, producto_leche, cliente_limpio):
+E       fixture 'cliente_limpio' not found
+>       available fixtures: _dj_autoclear_mailbox, _django_clear_site_cache, _django_db_helper, _django_db_marker, _django_isolate_apps, _django_set_urlconf, _django_setup_unittest, _fail_for_invalid_template_variable, _live_server_helper, _template_string_if_invalid_marker, admin_client, admin_user, assistant_user, async_client, async_rf, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, categoria_lacteos, client, cliente, db, django_assert_max_num_queries, django_assert_num_queries, django_capture_on_commit_callbacks, django_db_blocker, django_db_createdb, django_db_keepdb, django_db_modify_db_settings, django_db_modify_db_settings_parallel_suffix, django_db_modify_db_settings_tox_suffix, django_db_modify_db_settings_xdist_suffix, django_db_reset_sequences, django_db_serialized_rollback, django_db_setup, django_db_use_migrations, django_isolated_apps, django_mail_dnsname, django_mail_patch_dns, django_test_environment, django_user_model, django_username_field, doctest_namespace, lista_general, live_server, mailoutbox, monkeypatch, producto_leche, producto_mp, producto_pt, proveedor, pytestconfig, receta, record_property, record_testsuite_property, record_xml_attribute, recwarn, rf, settings, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, transactional_db, unidad_kg
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+C:\Users\elier\Documents\Desarollos\LacteOps\tests\test_listas_precio.py:69
+_____________ ERROR at setup of test_precio_no_aprobado_no_usable _____________
+file C:\Users\elier\Documents\Desarollos\LacteOps\tests\test_listas_precio.py, line 83
+  @pytest.mark.django_db
+  def test_precio_no_aprobado_no_usable(lista_general, producto_leche, cliente_limpio):
+E       fixture 'cliente_limpio' not found
+>       available fixtures: _dj_autoclear_mailbox, _django_clear_site_cache, _django_db_helper, _django_db_marker, _django_isolate_apps, _django_set_urlconf, _django_setup_unittest, _fail_for_invalid_template_variable, _live_server_helper, _template_string_if_invalid_marker, admin_client, admin_user, assistant_user, async_client, async_rf, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, categoria_lacteos, client, cliente, db, django_assert_max_num_queries, django_assert_num_queries, django_capture_on_commit_callbacks, django_db_blocker, django_db_createdb, django_db_keepdb, django_db_modify_db_settings, django_db_modify_db_settings_parallel_suffix, django_db_modify_db_settings_tox_suffix, django_db_modify_db_settings_xdist_suffix, django_db_reset_sequences, django_db_serialized_rollback, django_db_setup, django_db_use_migrations, django_isolated_apps, django_mail_dnsname, django_mail_patch_dns, django_test_environment, django_user_model, django_username_field, doctest_namespace, lista_general, live_server, mailoutbox, monkeypatch, producto_leche, producto_mp, producto_pt, proveedor, pytestconfig, receta, record_property, record_testsuite_property, record_xml_attribute, recwarn, rf, settings, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, transactional_db, unidad_kg
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+C:\Users\elier\Documents\Desarollos\LacteOps\tests\test_listas_precio.py:83
+__________ ERROR at setup of test_factura_sin_lista_bloquea_emision ___________
+file C:\Users\elier\Documents\Desarollos\LacteOps\tests\test_listas_precio.py, line 102
+  @pytest.mark.django_db
+  def test_factura_sin_lista_bloquea_emision(producto_leche, cliente_limpio):
+E       fixture 'cliente_limpio' not found
+>       available fixtures: _dj_autoclear_mailbox, _django_clear_site_cache, _django_db_helper, _django_db_marker, _django_isolate_apps, _django_set_urlconf, _django_setup_unittest, _fail_for_invalid_template_variable, _live_server_helper, _template_string_if_invalid_marker, admin_client, admin_user, assistant_user, async_client, async_rf, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, categoria_lacteos, client, cliente, db, django_assert_max_num_queries, django_assert_num_queries, django_capture_on_commit_callbacks, django_db_blocker, django_db_createdb, django_db_keepdb, django_db_modify_db_settings, django_db_modify_db_settings_parallel_suffix, django_db_modify_db_settings_tox_suffix, django_db_modify_db_settings_xdist_suffix, django_db_reset_sequences, django_db_serialized_rollback, django_db_setup, django_db_use_migrations, django_isolated_apps, django_mail_dnsname, django_mail_patch_dns, django_test_environment, django_user_model, django_username_field, doctest_namespace, lista_general, live_server, mailoutbox, monkeypatch, producto_leche, producto_mp, producto_pt, proveedor, pytestconfig, receta, record_property, record_testsuite_property, record_xml_attribute, recwarn, rf, settings, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, transactional_db, unidad_kg
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+C:\Users\elier\Documents\Desarollos\LacteOps\tests\test_listas_precio.py:102
+_______________ ERROR at setup of test_orden_precarga_consumos ________________
+tests\conftest.py:117: in receta
+    r = Receta.objects.create(
+venv\Lib\site-packages\django\db\models\manager.py:87: in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv\Lib\site-packages\django\db\models\query.py:667: in create
+    obj = self.model(**kwargs)
+          ^^^^^^^^^^^^^^^^^^^^
+apps\core\models.py:69: in __init__
+    super().__init__(*args, **kwargs)
+venv\Lib\site-packages\django\db\models\base.py:590: in __init__
+    raise TypeError(
+E   TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+_______________ ERROR at setup of test_cierre_op_flujo_completo _______________
+tests\conftest.py:117: in receta
+    r = Receta.objects.create(
+venv\Lib\site-packages\django\db\models\manager.py:87: in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv\Lib\site-packages\django\db\models\query.py:667: in create
+    obj = self.model(**kwargs)
+          ^^^^^^^^^^^^^^^^^^^^
+apps\core\models.py:69: in __init__
+    super().__init__(*args, **kwargs)
+venv\Lib\site-packages\django\db\models\base.py:590: in __init__
+    raise TypeError(
+E   TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+_____________ ERROR at setup of test_cierre_op_stock_insuficiente _____________
+tests\conftest.py:117: in receta
+    r = Receta.objects.create(
+venv\Lib\site-packages\django\db\models\manager.py:87: in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv\Lib\site-packages\django\db\models\query.py:667: in create
+    obj = self.model(**kwargs)
+          ^^^^^^^^^^^^^^^^^^^^
+apps\core\models.py:69: in __init__
+    super().__init__(*args, **kwargs)
+venv\Lib\site-packages\django\db\models\base.py:590: in __init__
+    raise TypeError(
+E   TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+__________________ ERROR at setup of test_anular_op_abierta ___________________
+tests\conftest.py:117: in receta
+    r = Receta.objects.create(
+venv\Lib\site-packages\django\db\models\manager.py:87: in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv\Lib\site-packages\django\db\models\query.py:667: in create
+    obj = self.model(**kwargs)
+          ^^^^^^^^^^^^^^^^^^^^
+apps\core\models.py:69: in __init__
+    super().__init__(*args, **kwargs)
+venv\Lib\site-packages\django\db\models\base.py:590: in __init__
+    raise TypeError(
+E   TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+_____________ ERROR at setup of test_anular_op_cerrada_bloqueado ______________
+tests\conftest.py:117: in receta
+    r = Receta.objects.create(
+venv\Lib\site-packages\django\db\models\manager.py:87: in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv\Lib\site-packages\django\db\models\query.py:667: in create
+    obj = self.model(**kwargs)
+          ^^^^^^^^^^^^^^^^^^^^
+apps\core\models.py:69: in __init__
+    super().__init__(*args, **kwargs)
+venv\Lib\site-packages\django\db\models\base.py:590: in __init__
+    raise TypeError(
+E   TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+___________ ERROR at setup of test_auditlog_registra_cambio_estado ____________
+tests\conftest.py:117: in receta
+    r = Receta.objects.create(
+venv\Lib\site-packages\django\db\models\manager.py:87: in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv\Lib\site-packages\django\db\models\query.py:667: in create
+    obj = self.model(**kwargs)
+          ^^^^^^^^^^^^^^^^^^^^
+apps\core\models.py:69: in __init__
+    super().__init__(*args, **kwargs)
+venv\Lib\site-packages\django\db\models\base.py:590: in __init__
+    raise TypeError(
+E   TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+_____ ERROR at setup of test_segunda_ejecucion_mismo_periodo_lanza_error ______
+file C:\Users\elier\Documents\Desarollos\LacteOps\tests\test_reexpresion_idempotente.py, line 20
+  @pytest.mark.django_db
+  def test_segunda_ejecucion_mismo_periodo_lanza_error(cuenta_ves, user_tester):
+file C:\Users\elier\Documents\Desarollos\LacteOps\tests\test_reexpresion_idempotente.py, line 10
+  @pytest.fixture
+  def cuenta_ves(db, secuencia_vta): # Necesita secuencia para movimientos
+E       fixture 'secuencia_vta' not found
+>       available fixtures: _dj_autoclear_mailbox, _django_clear_site_cache, _django_db_helper, _django_db_marker, _django_isolate_apps, _django_set_urlconf, _django_setup_unittest, _fail_for_invalid_template_variable, _live_server_helper, _template_string_if_invalid_marker, admin_client, admin_user, async_client, async_rf, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, categoria_lacteos, client, cliente, cuenta_ves, db, django_assert_max_num_queries, django_assert_num_queries, django_capture_on_commit_callbacks, django_db_blocker, django_db_createdb, django_db_keepdb, django_db_modify_db_settings, django_db_modify_db_settings_parallel_suffix, django_db_modify_db_settings_tox_suffix, django_db_modify_db_settings_xdist_suffix, django_db_reset_sequences, django_db_serialized_rollback, django_db_setup, django_db_use_migrations, django_isolated_apps, django_mail_dnsname, django_mail_patch_dns, django_test_environment, django_user_model, django_username_field, doctest_namespace, live_server, mailoutbox, monkeypatch, producto_mp, producto_pt, proveedor, pytestconfig, receta, record_property, record_testsuite_property, record_xml_attribute, recwarn, rf, settings, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, transactional_db, unidad_kg, user_tester
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+C:\Users\elier\Documents\Desarollos\LacteOps\tests\test_reexpresion_idempotente.py:10
+================================== FAILURES ===================================
+_________________ test_reexpresion_mensual_calcula_variacion __________________
+tests\test_bancos.py:330: in test_reexpresion_mensual_calcula_variacion
+    movimientos = ReexpresionMensual.ejecutar(
+E   TypeError: ReexpresionMensual.ejecutar() missing 1 required positional argument: 'usuario'
+____________________ test_reexpresion_mensual_idempotente _____________________
+tests\test_bancos.py:357: in test_reexpresion_mensual_idempotente
+    ReexpresionMensual.ejecutar(
+E   TypeError: ReexpresionMensual.ejecutar() missing 1 required positional argument: 'usuario'
+_____________ test_inventario_sin_precio_venta_usa_costo_promedio _____________
+tests\test_capital_trabajo.py:35: in test_inventario_sin_precio_venta_usa_costo_promedio
+    context = response.context_data if hasattr(response, 'context_data') else response.context
+                                                                              ^^^^^^^^^^^^^^^^
+E   AttributeError: 'HttpResponse' object has no attribute 'context'. Did you mean: 'content'?
+__________________ test_materia_prima_incluida_en_valoracion __________________
+tests\test_capital_trabajo.py:53: in test_materia_prima_incluida_en_valoracion
+    context = response.context_data if hasattr(response, 'context_data') else response.context
+                                                                              ^^^^^^^^^^^^^^^^
+E   AttributeError: 'HttpResponse' object has no attribute 'context'. Did you mean: 'content'?
+___________________ test_bloqueo_cliente_con_deuda_vencida ____________________
+tests\test_credito.py:140: in test_bloqueo_cliente_con_deuda_vencida
+    assert 'bloqueado' in str(exc_info.value).lower() or 'vencidas' in str(exc_info.value).lower()
+E   assert ('bloqueado' in "['no se puede emitir (debe seleccionar una lista de precios) un(a) factura de venta en estado emitida.']" or 'vencidas' in "['no se puede emitir (debe seleccionar una lista de precios) un(a) factura de venta en estado emitida.']")
+E    +  where "['no se puede emitir (debe seleccionar una lista de precios) un(a) factura de venta en estado emitida.']" = <built-in method lower of str object at 0x0000029575CA0710>()
+E    +    where <built-in method lower of str object at 0x0000029575CA0710> = "['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']".lower
+E    +      where "['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']" = str(ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']))
+E    +        where ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']) = <ExceptionInfo ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']) tblen=2>.value
+E    +  and   "['no se puede emitir (debe seleccionar una lista de precios) un(a) factura de venta en estado emitida.']" = <built-in method lower of str object at 0x0000029575CA07B0>()
+E    +    where <built-in method lower of str object at 0x0000029575CA07B0> = "['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']".lower
+E    +      where "['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']" = str(ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']))
+E    +        where ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']) = <ExceptionInfo ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']) tblen=2>.value
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:01:18,148 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+2026-03-12 10:01:18,148 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+_____________________ test_advertencia_no_bloquea_emision _____________________
+tests\test_credito.py:179: in test_advertencia_no_bloquea_emision
+    fv_nueva.emitir()
+apps\ventas\models.py:160: in emitir
+    raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir (debe seleccionar una lista de precios)')
+E   apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:01:18,164 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+2026-03-12 10:01:18,164 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+_____________________ test_cliente_sin_deuda_vencida_pasa _____________________
+tests\test_credito.py:203: in test_cliente_sin_deuda_vencida_pasa
+    fv.emitir()
+apps\ventas\models.py:160: in emitir
+    raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir (debe seleccionar una lista de precios)')
+E   apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:01:18,185 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 100 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+2026-03-12 10:01:18,185 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 100 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 100 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+_______________________ test_factura_pagada_no_bloquea ________________________
+tests\test_credito.py:243: in test_factura_pagada_no_bloquea
+    fv_nueva.emitir()
+apps\ventas\models.py:160: in emitir
+    raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir (debe seleccionar una lista de precios)')
+E   apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:01:18,203 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+2026-03-12 10:01:18,203 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+_______________ test_fecha_vencimiento_calculada_correctamente ________________
+tests\test_credito.py:268: in test_fecha_vencimiento_calculada_correctamente
+    fv.emitir()
+apps\ventas\models.py:160: in emitir
+    raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir (debe seleccionar una lista de precios)')
+E   apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:01:18,222 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 100 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+2026-03-12 10:01:18,222 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 100 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 100 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+_______________________ test_dias_credito_personalizado _______________________
+tests\test_credito.py:299: in test_dias_credito_personalizado
+    fv.emitir()
+apps\ventas\models.py:160: in emitir
+    raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir (debe seleccionar una lista de precios)')
+E   apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:01:18,238 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+2026-03-12 10:01:18,238 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+___________________________ test_cierre_op_atomico ____________________________
+tests\test_produccion.py:159: in test_cierre_op_atomico
+    receta_doble = Receta.objects.create(
+venv\Lib\site-packages\django\db\models\manager.py:87: in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv\Lib\site-packages\django\db\models\query.py:667: in create
+    obj = self.model(**kwargs)
+          ^^^^^^^^^^^^^^^^^^^^
+apps\core\models.py:69: in __init__
+    super().__init__(*args, **kwargs)
+venv\Lib\site-packages\django\db\models\base.py:590: in __init__
+    raise TypeError(
+E   TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+_____________________ test_emitir_factura_descuenta_stock _____________________
+tests\test_ventas.py:74: in test_emitir_factura_descuenta_stock
+    factura.emitir()
+apps\ventas\models.py:160: in emitir
+    raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir (debe seleccionar una lista de precios)')
+E   apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:01:21,457 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+2026-03-12 10:01:21,457 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+_______________________ test_emitir_sin_stock_bloqueado _______________________
+tests\test_ventas.py:101: in test_emitir_sin_stock_bloqueado
+    factura.emitir()
+apps\ventas\models.py:160: in emitir
+    raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir (debe seleccionar una lista de precios)')
+E   apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:01:21,475 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 5 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+2026-03-12 10:01:21,475 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 5 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 5 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+___________________________ test_emitir_idempotente ___________________________
+tests\test_ventas.py:123: in test_emitir_idempotente
+    factura.emitir()
+apps\ventas\models.py:160: in emitir
+    raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir (debe seleccionar una lista de precios)')
+E   apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:01:21,491 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+2026-03-12 10:01:21,491 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+_____________________ test_marcar_cobrada_flujo_completo ______________________
+tests\test_ventas.py:151: in test_marcar_cobrada_flujo_completo
+    factura.emitir()
+apps\ventas\models.py:160: in emitir
+    raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir (debe seleccionar una lista de precios)')
+E   apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:01:21,507 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+2026-03-12 10:01:21,507 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+_____________________ test_marcar_cobrada_saldo_pendiente _____________________
+tests\test_ventas.py:183: in test_marcar_cobrada_saldo_pendiente
+    factura.emitir()
+apps\ventas\models.py:160: in emitir
+    raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir (debe seleccionar una lista de precios)')
+E   apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:01:21,525 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+2026-03-12 10:01:21,525 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 50 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: INICIAL
+=========================== short test summary info ===========================
+FAILED tests/test_bancos.py::test_reexpresion_mensual_calcula_variacion - TypeError: ReexpresionMensual.ejecutar() missing 1 required positional argument: 'usuario'
+FAILED tests/test_bancos.py::test_reexpresion_mensual_idempotente - TypeError: ReexpresionMensual.ejecutar() missing 1 required positional argument: 'usuario'
+FAILED tests/test_capital_trabajo.py::test_inventario_sin_precio_venta_usa_costo_promedio - AttributeError: 'HttpResponse' object has no attribute 'context'. Did you mean: 'content'?
+FAILED tests/test_capital_trabajo.py::test_materia_prima_incluida_en_valoracion - AttributeError: 'HttpResponse' object has no attribute 'context'. Did you mean: 'content'?
+FAILED tests/test_credito.py::test_bloqueo_cliente_con_deuda_vencida - assert ('bloqueado' in "['no se puede emitir (debe seleccionar una lista de precios) un(a) factura de venta en estado emitida.']" or 'vencidas' in "['no se puede emitir (debe seleccionar una lista de precios) un(a) factura de venta en estado emitida.']")
+ +  where "['no se puede emitir (debe seleccionar una lista de precios) un(a) factura de venta en estado emitida.']" = <built-in method lower of str object at 0x0000029575CA0710>()
+ +    where <built-in method lower of str object at 0x0000029575CA0710> = "['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']".lower
+ +      where "['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']" = str(ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']))
+ +        where ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']) = <ExceptionInfo ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']) tblen=2>.value
+ +  and   "['no se puede emitir (debe seleccionar una lista de precios) un(a) factura de venta en estado emitida.']" = <built-in method lower of str object at 0x0000029575CA07B0>()
+ +    where <built-in method lower of str object at 0x0000029575CA07B0> = "['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']".lower
+ +      where "['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']" = str(ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']))
+ +        where ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']) = <ExceptionInfo ValidationError(['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']) tblen=2>.value
+FAILED tests/test_credito.py::test_advertencia_no_bloquea_emision - apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+FAILED tests/test_credito.py::test_cliente_sin_deuda_vencida_pasa - apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+FAILED tests/test_credito.py::test_factura_pagada_no_bloquea - apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+FAILED tests/test_credito.py::test_fecha_vencimiento_calculada_correctamente - apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+FAILED tests/test_credito.py::test_dias_credito_personalizado - apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+FAILED tests/test_produccion.py::test_cierre_op_atomico - TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+FAILED tests/test_ventas.py::test_emitir_factura_descuenta_stock - apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+FAILED tests/test_ventas.py::test_emitir_sin_stock_bloqueado - apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+FAILED tests/test_ventas.py::test_emitir_idempotente - apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+FAILED tests/test_ventas.py::test_marcar_cobrada_flujo_completo - apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+FAILED tests/test_ventas.py::test_marcar_cobrada_saldo_pendiente - apps.core.exceptions.EstadoInvalidoError: ['No se puede emitir (debe seleccionar una lista de precios) un(a) Factura de Venta en estado EMITIDA.']
+ERROR tests/test_listas_precio.py::test_precio_asignado_automaticamente_al_emitir
+ERROR tests/test_listas_precio.py::test_producto_sin_precio_en_lista_bloquea_emision
+ERROR tests/test_listas_precio.py::test_precio_no_aprobado_no_usable
+ERROR tests/test_listas_precio.py::test_factura_sin_lista_bloquea_emision
+ERROR tests/test_produccion.py::test_orden_precarga_consumos - TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+ERROR tests/test_produccion.py::test_cierre_op_flujo_completo - TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+ERROR tests/test_produccion.py::test_cierre_op_stock_insuficiente - TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+ERROR tests/test_produccion.py::test_anular_op_abierta - TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+ERROR tests/test_produccion.py::test_anular_op_cerrada_bloqueado - TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+ERROR tests/test_produccion.py::test_auditlog_registra_cambio_estado - TypeError: Receta() got unexpected keyword arguments: 'producto_terminado'
+ERROR tests/test_reexpresion_idempotente.py::test_segunda_ejecucion_mismo_periodo_lanza_error
+================== 16 failed, 48 passed, 11 errors in 5.59s ===================

@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import PermissionDenied
 from functools import wraps
 
 def setup_groups():
     """
     Crea los grupos base del sistema y asigna permisos si es necesario.
+
+    B9: Master y Administrador reciben 'reportes.view_reportelink' para que la
+    sección de reportes sea visible en el sidebar de Jazzmin y las vistas estén
+    disponibles para esos roles.
     """
     grupos = [
         'Master',
@@ -16,6 +20,17 @@ def setup_groups():
     ]
     for nombre in grupos:
         Group.objects.get_or_create(name=nombre)
+
+    # Asignar view_reportelink a Master y Administrador
+    try:
+        perm = Permission.objects.get(codename='view_reportelink', content_type__app_label='reportes')
+        for nombre in ('Master', 'Administrador'):
+            grupo = Group.objects.get(name=nombre)
+            grupo.permissions.add(perm)
+    except Permission.DoesNotExist:
+        # La migración que crea el permiso aún no se ha ejecutado; se ignorará
+        # y el permiso se asignará en la siguiente migración/deploy.
+        pass
 
 def require_group(*grupos):
     """

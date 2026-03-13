@@ -260,3 +260,95 @@ class ReexpresionMensual:
             referencia, len(movimientos)
         )
         return movimientos
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Movimiento de Tesorería libre
+# ─────────────────────────────────────────────────────────────────────────────
+
+def ejecutar_movimiento_tesoreria(
+    cuenta,
+    tipo: str,
+    monto,
+    moneda: str,
+    tasa_cambio,
+    categoria,
+    descripcion: str,
+    fecha,
+    usuario,
+):
+    """
+    Registra un MovimientoTesoreria y genera el MovimientoCaja correspondiente.
+
+    Pasos:
+      1. Valida que la categoría tenga contexto 'TESORERIA'.
+      2. Crea MovimientoTesoreria (inmutable — calcula número y monto_usd en save()).
+      3. Genera MovimientoCaja:
+           CARGO  → tipo_caja='SALIDA'
+           ABONO  → tipo_caja='ENTRADA'
+      Todo dentro de transaction.atomic() con select_for_update() en la cuenta
+      (delegado a registrar_movimiento_caja).
+
+    Args:
+        cuenta       (CuentaBancaria): Cuenta afectada.
+        tipo         (str): 'CARGO' o 'ABONO'.
+        monto        (Decimal): Monto en la moneda indicada.
+        moneda       (str): 'USD' o 'VES'.
+        tasa_cambio  (Decimal): Tasa BCV.
+        categoria    (CategoriaGasto): Debe tener contexto='TESORERIA'.
+        descripcion  (str): Descripción del movimiento.
+        fecha        (date): Fecha del movimiento.
+        usuario      (User): Usuario que ejecuta la acción.
+
+    Returns:
+        MovimientoTesoreria: El movimiento creado.
+
+    Raises:
+        EstadoInvalidoError: Si la categoría no tiene contexto TESORERIA.
+        SaldoInsuficienteError: Si la cuenta no tiene saldo para un CARGO.
+        ValueError: Si la cuenta está inactiva.
+    """
+    from apps.bancos.models import MovimientoTesoreria
+    from apps.core.exceptions import EstadoInvalidoError
+
+    monto = Decimal(str(monto))
+    tasa_cambio = Decimal(str(tasa_cambio))
+
+    if categoria.contexto != 'TESORERIA':
+        raise EstadoInvalidoError(
+            'CategoriaGasto',
+            categoria.contexto,
+            'usar en movimiento de tesorería (debe tener contexto=TESORERIA)',
+        )
+
+    tipo_caja = 'SALIDA' if tipo == 'CARGO' else 'ENTRADA'
+
+    with transaction.atomic():
+        mov = MovimientoTesoreria.objects.create(
+            cuenta=cuenta,
+            tipo=tipo,
+            monto=monto,
+            moneda=moneda,
+            tasa_cambio=tasa_cambio,
+            categoria=categoria,
+            descripcion=descripcion,
+            fecha=fecha,
+            registrado_por=usuario,
+            monto_usd=Decimal('0.00'),  # placeholder; save() recalcula
+        )
+
+        registrar_movimiento_caja(
+            cuenta=cuenta,
+            tipo=tipo_caja,
+            monto=monto,
+            moneda=moneda,
+            tasa_cambio=mov.tasa_cambio,
+            referencia=mov.numero,
+            notas=descripcion,
+        )
+
+    logger.info(
+        'MovimientoTesoreria %s | %s | Cuenta: %s | %s %s | Categoria: %s',
+        mov.numero, tipo, cuenta, monto, moneda, categoria,
+    )
+    return mov

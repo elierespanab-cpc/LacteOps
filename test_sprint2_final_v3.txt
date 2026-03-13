@@ -1,0 +1,123 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.12.8, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\elier\Documents\Desarollos\LacteOps\venv\Scripts\python.exe
+cachedir: .pytest_cache
+django: version: 6.0.3, settings: erp_lacteo.settings.development (from ini)
+rootdir: C:\Users\elier\Documents\Desarollos\LacteOps
+configfile: pytest.ini
+plugins: django-4.12.0
+collecting ... collected 75 items
+
+tests/test_ajustes.py::test_ajuste_positivo_aumenta_stock_y_precio PASSED [  1%]
+tests/test_ajustes.py::test_ajuste_negativo_descuenta_stock PASSED       [  2%]
+tests/test_ajustes.py::test_ajuste_negativo_bloqueado_sin_stock PASSED   [  4%]
+tests/test_ajustes.py::test_ajuste_cantidad_cero_rechazado PASSED        [  5%]
+tests/test_ajustes.py::test_ajuste_crea_un_movimiento PASSED             [  6%]
+tests/test_ajustes.py::test_multiples_ajustes_mantienen_ppm PASSED       [  8%]
+tests/test_ajustes.py::test_ajuste_atomicidad_rollback PASSED            [  9%]
+tests/test_bancos.py::test_movimiento_entrada_aumenta_saldo PASSED       [ 10%]
+tests/test_bancos.py::test_movimiento_salida_descuenta_saldo PASSED      [ 12%]
+tests/test_bancos.py::test_saldo_negativo_bloqueado PASSED               [ 13%]
+tests/test_bancos.py::test_cobro_ves_calcula_usd PASSED                  [ 14%]
+tests/test_bancos.py::test_movimiento_caja_inmutable PASSED              [ 16%]
+tests/test_bancos.py::test_cuenta_inactiva_rechaza_movimientos PASSED    [ 17%]
+tests/test_bancos.py::test_transferencia_exitosa PASSED                  [ 18%]
+tests/test_bancos.py::test_reexpresion_mensual_calcula_variacion PASSED  [ 20%]
+tests/test_bancos.py::test_reexpresion_mensual_idempotente FAILED        [ 21%]
+tests/test_capital_trabajo.py::test_inventario_sin_precio_venta_usa_costo_promedio PASSED [ 22%]
+tests/test_capital_trabajo.py::test_materia_prima_incluida_en_valoracion PASSED [ 24%]
+tests/test_compras.py::test_factura_compra_flujo_completo PASSED         [ 25%]
+tests/test_compras.py::test_aprobar_factura_ya_aprobada PASSED           [ 26%]
+tests/test_compras.py::test_conversion_ves_a_usd PASSED                  [ 28%]
+tests/test_compras.py::test_anular_factura_recibida PASSED               [ 29%]
+tests/test_compras.py::test_anular_factura_aprobada_bloqueado PASSED     [ 30%]
+tests/test_credito.py::test_bloqueo_cliente_con_deuda_vencida FAILED     [ 32%]
+tests/test_credito.py::test_advertencia_no_bloquea_emision PASSED        [ 33%]
+tests/test_credito.py::test_cliente_sin_deuda_vencida_pasa PASSED        [ 34%]
+tests/test_credito.py::test_factura_pagada_no_bloquea PASSED             [ 36%]
+tests/test_credito.py::test_fecha_vencimiento_calculada_correctamente PASSED [ 37%]
+tests/test_credito.py::test_dias_credito_personalizado PASSED            [ 38%]
+tests/test_gastos.py::test_gasto_descuenta_saldo PASSED                  [ 40%]
+tests/test_gastos.py::test_gasto_mayor_saldo_bloqueado PASSED            [ 41%]
+tests/test_gastos.py::test_cobro_ves_calcula_monto_usd PASSED            [ 42%]
+tests/test_gastos.py::test_cobro_sin_cuenta_no_genera_movimiento PASSED  [ 44%]
+tests/test_gastos.py::test_cobro_con_cuenta_aumenta_saldo PASSED         [ 45%]
+tests/test_gastos.py::test_transferencia_ejecutada_no_puede_re_ejecutarse PASSED [ 46%]
+tests/test_gastos.py::test_transferencia_anulacion_genera_inversos PASSED [ 48%]
+tests/test_kardex.py::test_entrada_stock_cero PASSED                     [ 49%]
+tests/test_kardex.py::test_promedio_ponderado_segunda_entrada PASSED     [ 50%]
+tests/test_kardex.py::test_salida_descuenta_stock PASSED                 [ 52%]
+tests/test_kardex.py::test_salida_no_modifica_costo_promedio PASSED      [ 53%]
+tests/test_kardex.py::test_stock_negativo_bloqueado PASSED               [ 54%]
+tests/test_kardex.py::test_entrada_crea_movimiento PASSED                [ 56%]
+tests/test_kardex.py::test_salida_crea_movimiento PASSED                 [ 57%]
+tests/test_kardex.py::test_atomicidad_entrada PASSED                     [ 58%]
+tests/test_listas_precio.py::test_precio_asignado_automaticamente_al_emitir PASSED [ 60%]
+tests/test_listas_precio.py::test_producto_sin_precio_en_lista_bloquea_emision PASSED [ 61%]
+tests/test_listas_precio.py::test_precio_no_aprobado_no_usable PASSED    [ 62%]
+tests/test_listas_precio.py::test_factura_sin_lista_bloquea_emision PASSED [ 64%]
+tests/test_listas_precio.py::test_solo_admin_y_master_aprueban_precios PASSED [ 65%]
+tests/test_numeracion.py::test_secuencia_incremental PASSED              [ 66%]
+tests/test_numeracion.py::test_secuencias_independientes PASSED          [ 68%]
+tests/test_numeracion.py::test_numeracion_no_repite PASSED               [ 69%]
+tests/test_numeracion.py::test_numeracion_no_reutiliza_anulados PASSED   [ 70%]
+tests/test_numeracion.py::test_numeracion_relleno_ceros PASSED           [ 72%]
+tests/test_produccion.py::test_orden_precarga_consumos PASSED            [ 73%]
+tests/test_produccion.py::test_cierre_op_flujo_completo PASSED           [ 74%]
+tests/test_produccion.py::test_cierre_op_stock_insuficiente PASSED       [ 76%]
+tests/test_produccion.py::test_cierre_op_atomico PASSED                  [ 77%]
+tests/test_produccion.py::test_anular_op_abierta PASSED                  [ 78%]
+tests/test_produccion.py::test_anular_op_cerrada_bloqueado PASSED        [ 80%]
+tests/test_produccion.py::test_auditlog_registra_cambio_estado PASSED    [ 81%]
+tests/test_produccion_conjunta.py::test_costo_distribuido_por_valor_mercado PASSED [ 82%]
+tests/test_produccion_conjunta.py::test_subproducto_entra_a_costo_cero PASSED [ 84%]
+tests/test_produccion_conjunta.py::test_orden_sin_producto_principal_no_cierra PASSED [ 85%]
+tests/test_produccion_conjunta.py::test_residuo_redondeo_absorbido PASSED [ 86%]
+tests/test_rbac.py::test_asistente_ventas_no_aprueba_precios PASSED      [ 88%]
+tests/test_rbac.py::test_jefe_produccion_no_aprueba_ajuste_grande PASSED [ 89%]
+tests/test_rbac.py::test_administrador_aprueba_ajuste_grande PASSED      [ 90%]
+tests/test_reexpresion_idempotente.py::test_segunda_ejecucion_mismo_periodo_lanza_error PASSED [ 92%]
+tests/test_ventas.py::test_emitir_factura_descuenta_stock PASSED         [ 93%]
+tests/test_ventas.py::test_emitir_sin_stock_bloqueado PASSED             [ 94%]
+tests/test_ventas.py::test_emitir_idempotente PASSED                     [ 96%]
+tests/test_ventas.py::test_marcar_cobrada_flujo_completo PASSED          [ 97%]
+tests/test_ventas.py::test_marcar_cobrada_saldo_pendiente PASSED         [ 98%]
+tests/test_bancos.py::test_transferencia_atomica PASSED                  [100%]
+
+================================== FAILURES ===================================
+____________________ test_reexpresion_mensual_idempotente _____________________
+tests\test_bancos.py:366: in test_reexpresion_mensual_idempotente
+    ReexpresionMensual.ejecutar(
+apps\bancos\services.py:207: in ejecutar
+    raise EstadoInvalidoError('Reexpresi¾n Mensual', 'EJECUTADA', 'PerÝodo ya reexpresado')
+E   apps.core.exceptions.EstadoInvalidoError: ['No se puede PerÝodo ya reexpresado un(a) Reexpresi¾n Mensual en estado EJECUTADA.']
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:20:12,039 INFO apps.bancos.services MovimientoCaja | Cuenta: Cuenta VES Operativa | Tipo: REEXPRESION | Monto: 1666.666666666666666666666667 USD | MontoCaja: 1666.666666666666666666666667 | Ref: REEXP-202603
+2026-03-12 10:20:12,039 INFO apps.bancos.services MovimientoCaja | Cuenta: Cuenta VES Operativa | Tipo: REEXPRESION | Monto: 1666.666666666666666666666667 USD | MontoCaja: 1666.666666666666666666666667 | Ref: REEXP-202603
+2026-03-12 10:20:12,043 INFO apps.bancos.services REEXPRESION | Cuenta: Cuenta VES Operativa | Saldo VES: 500000.00 | USD antes: 8333.333333333333333333333333 | USD despuÚs: 1E+4 | Variaci¾n: 1666.666666666666666666666667
+2026-03-12 10:20:12,043 INFO apps.bancos.services REEXPRESION | Cuenta: Cuenta VES Operativa | Saldo VES: 500000.00 | USD antes: 8333.333333333333333333333333 | USD despuÚs: 1E+4 | Variaci¾n: 1666.666666666666666666666667
+2026-03-12 10:20:12,043 INFO apps.bancos.services ReexpresionMensual completada para REEXP-202603. 1 cuentas procesadas.
+2026-03-12 10:20:12,043 INFO apps.bancos.services ReexpresionMensual completada para REEXP-202603. 1 cuentas procesadas.
+------------------------------ Captured log call ------------------------------
+INFO     apps.bancos.services:services.py:147 MovimientoCaja | Cuenta: Cuenta VES Operativa | Tipo: REEXPRESION | Monto: 1666.666666666666666666666667 USD | MontoCaja: 1666.666666666666666666666667 | Ref: REEXP-202603
+INFO     apps.bancos.services:services.py:245 REEXPRESION | Cuenta: Cuenta VES Operativa | Saldo VES: 500000.00 | USD antes: 8333.333333333333333333333333 | USD despuÚs: 1E+4 | Variaci¾n: 1666.666666666666666666666667
+INFO     apps.bancos.services:services.py:258 ReexpresionMensual completada para REEXP-202603. 1 cuentas procesadas.
+___________________ test_bloqueo_cliente_con_deuda_vencida ____________________
+tests\test_credito.py:138: in test_bloqueo_cliente_con_deuda_vencida
+    with pytest.raises(EstadoInvalidoError) as exc_info:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE <class 'apps.core.exceptions.EstadoInvalidoError'>
+---------------------------- Captured stderr call -----------------------------
+2026-03-12 10:20:13,394 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+2026-03-12 10:20:13,394 INFO apps.almacen.services ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+2026-03-12 10:20:13,397 INFO apps.almacen.services SALIDA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 1.0000 | CostoUnitario: 5.000000 USD | StockRestante: 199.0000 | Ref: VTA-NUEVA-01
+2026-03-12 10:20:13,397 INFO apps.almacen.services SALIDA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 1.0000 | CostoUnitario: 5.000000 USD | StockRestante: 199.0000 | Ref: VTA-NUEVA-01
+2026-03-12 10:20:13,397 INFO apps.ventas.models Factura venta VTA-NUEVA-01 emitida. Salidas de inventario registradas.
+2026-03-12 10:20:13,397 INFO apps.ventas.models Factura venta VTA-NUEVA-01 emitida. Salidas de inventario registradas.
+------------------------------ Captured log call ------------------------------
+INFO     apps.almacen.services:services.py:118 ENTRADA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 200 | CostoUnitario: 5.00 USD | NuevoCostoPromedio: 5.00 USD | Ref: STOCK-INICIAL
+INFO     apps.almacen.services:services.py:181 SALIDA Kardex | Producto: [PT-001] Queso Blanco | Cantidad: 1.0000 | CostoUnitario: 5.000000 USD | StockRestante: 199.0000 | Ref: VTA-NUEVA-01
+INFO     apps.ventas.models:models.py:231 Factura venta VTA-NUEVA-01 emitida. Salidas de inventario registradas.
+=========================== short test summary info ===========================
+FAILED tests/test_bancos.py::test_reexpresion_mensual_idempotente - apps.core.exceptions.EstadoInvalidoError: ['No se puede PerÝodo ya reexpresado un(a) Reexpresi¾n Mensual en estado EJECUTADA.']
+FAILED tests/test_credito.py::test_bloqueo_cliente_con_deuda_vencida - Failed: DID NOT RAISE <class 'apps.core.exceptions.EstadoInvalidoError'>
+======================== 2 failed, 73 passed in 7.24s =========================

@@ -58,5 +58,15 @@
       "prefijo": "APC-",
       "digitos": 4
     }
+  },
+  {
+    "model": "core.secuencia",
+    "pk": 7,
+    "fields": {
+      "tipo_documento": "SOC",
+      "ultimo_numero": 0,
+      "prefijo": "SOC-",
+      "digitos": 4
+    }
   }
 ]
