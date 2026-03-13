@@ -14,7 +14,8 @@ REGLAS:
   - Transferencia entre monedas distintas requiere tasa_cambio explícita (≠ 1:1).
 """
 import logging
-from decimal import Decimal
+from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import models, transaction
 from django.utils.timezone import now
@@ -249,3 +250,78 @@ class PeriodoReexpresado(AuditableModel):
 
     def __str__(self):
         return f"Reexpresión {self.mes:02d}/{self.anio}"
+
+
+class MovimientoTesoreria(models.Model):
+    """
+    Movimiento de tesorería libre (cargo o abono) clasificado por CategoriaGasto.
+    INMUTABLE post-creación: idéntico a MovimientoCaja.
+    Genera automáticamente un MovimientoCaja vía ejecutar_movimiento_tesoreria().
+
+    Bimoneda:
+      USD → tasa_cambio=1, monto_usd=monto
+      VES → monto_usd = monto / tasa_cambio
+    """
+    TIPOS = [
+        ('CARGO', 'Cargo'),
+        ('ABONO', 'Abono'),
+    ]
+    MONEDA_CHOICES = [
+        ('USD', 'USD - Dólar Americano'),
+        ('VES', 'VES - Bolívar Soberano'),
+    ]
+
+    numero = models.CharField(
+        max_length=20, unique=True, editable=False, verbose_name='Número')
+    cuenta = models.ForeignKey(
+        CuentaBancaria, on_delete=models.PROTECT,
+        related_name='movimientos_tesoreria', verbose_name='Cuenta')
+    tipo = models.CharField(
+        max_length=10, choices=TIPOS, verbose_name='Tipo')
+    monto = models.DecimalField(
+        max_digits=18, decimal_places=2, verbose_name='Monto')
+    moneda = models.CharField(
+        max_length=3, choices=MONEDA_CHOICES, verbose_name='Moneda')
+    tasa_cambio = models.DecimalField(
+        max_digits=18, decimal_places=6, verbose_name='Tasa de Cambio (VES/USD)')
+    monto_usd = models.DecimalField(
+        max_digits=18, decimal_places=2, editable=False,
+        verbose_name='Monto en USD')
+    categoria = models.ForeignKey(
+        'core.CategoriaGasto', on_delete=models.PROTECT,
+        verbose_name='Categoría')
+    descripcion = models.TextField(verbose_name='Descripción')
+    fecha = models.DateField(default=date.today, verbose_name='Fecha')
+    registrado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, verbose_name='Registrado por')
+
+    class Meta:
+        verbose_name = 'Movimiento de Tesorería'
+        verbose_name_plural = 'Movimientos de Tesorería'
+        ordering = ['-fecha', '-id']
+
+    def __str__(self):
+        return f'{self.numero} — {self.tipo} {self.monto} {self.moneda}'
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise EstadoInvalidoError(
+                'MovimientoTesoreria', 'GUARDADO', 'modificar (es inmutable)')
+        from apps.core.services import generar_numero
+        if not self.numero:
+            self.numero = generar_numero('TES')
+        # Bimoneda: calcular monto_usd
+        monto = Decimal(str(self.monto))
+        tasa = Decimal(str(self.tasa_cambio))
+        if self.moneda == 'USD':
+            self.tasa_cambio = Decimal('1.000000')
+            self.monto_usd = monto
+        else:
+            self.monto_usd = (monto / tasa).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP)
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise EstadoInvalidoError(
+            'MovimientoTesoreria', 'GUARDADO', 'eliminar (es inmutable)')

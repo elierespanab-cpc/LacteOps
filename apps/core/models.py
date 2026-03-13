@@ -159,3 +159,36 @@ class ConfiguracionEmpresa(models.Model):
             raise ValueError("Solo puede existir un registro de Configuración de Empresa.")
         self.pk = 1
         super().save(*args, **kwargs)
+
+
+class TasaCambio(models.Model):
+    FUENTES = [('BCV_AUTO', 'BCV Auto'), ('BCV_MANUAL', 'BCV Manual'), ('USUARIO', 'Usuario')]
+    fecha = models.DateField(unique=True)
+    tasa = models.DecimalField(max_digits=18, decimal_places=6)
+    fuente = models.CharField(max_length=20, choices=FUENTES, default='BCV_AUTO')
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-fecha']
+        verbose_name = 'Tasa de Cambio'
+        verbose_name_plural = 'Tasas de Cambio'
+
+    def __str__(self):
+        return f'{self.fecha} — {self.tasa}'
+
+
+class CategoriaGasto(AuditableModel):
+    CONTEXTOS = [('FACTURA', 'Factura'), ('TESORERIA', 'Tesorería')]
+    nombre = models.CharField(max_length=100)
+    padre = models.ForeignKey('self', null=True, blank=True,
+                               on_delete=models.PROTECT, related_name='subcategorias')
+    contexto = models.CharField(max_length=10, choices=CONTEXTOS)
+    activa = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ['nombre', 'contexto']
+        verbose_name = 'Categoría de Gasto'
+        verbose_name_plural = 'Categorías de Gasto'
+
+    def __str__(self):
+        return self.nombre

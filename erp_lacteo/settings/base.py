@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     "apps.produccion",
     "apps.bancos",
     "apps.reportes",
+    "apps.socios",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -139,6 +140,17 @@ JAZZMIN_SETTINGS = {
     "theme": "default",
     "navigation_expanded": False,
     "collapsible_nav": True,
+    "order_with_respect_to": [
+        "ventas",
+        "compras",
+        "produccion",
+        "almacen",
+        "bancos",
+        "socios",
+        "reportes",
+        "core",
+        "auth",
+    ],
     "hide_models": ["reportes.ReporteLink"],
     "icons": {
         "almacen.producto": "fas fa-boxes",
@@ -155,8 +167,13 @@ JAZZMIN_SETTINGS = {
         "bancos.cuentabancaria": "fas fa-university",
         "bancos.movimientocaja": "fas fa-money-bill-wave",
         "bancos.transferenciacuentas": "fas fa-random",
+        "bancos.movimientotesoreria": "fas fa-exchange-alt",
         "bancos.periodoreexpresado": "fas fa-calendar-check",
+        "core.tasacambio": "fas fa-dollar-sign",
+        "core.categoriagasto": "fas fa-tags",
         "core.auditlog": "fas fa-history",
+        "socios.socio": "fas fa-user-tie",
+        "socios.prestamoporsocio": "fas fa-hand-holding-usd",
     },
     "custom_links": {
         "reportes": [
