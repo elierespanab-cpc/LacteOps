@@ -2,12 +2,8 @@
 """
 test_ventas.py — Suite de pruebas para el módulo de Ventas.
 
-Cubre:
-  - emitir(): descuento de stock con movimiento kardex.
-  - Bloqueo de emisión sin stock suficiente.
-  - Idempotencia de emitir() (segunda llamada rechazada).
-  - Flujo cobrar: marcar_cobrada() cuando total_cobrado >= total.
-  - Bloqueo de cobro con saldo pendiente.
+Actualizado para Sprint 2: emitir() ahora requiere una Lista de Precios
+con el producto aprobado.
 """
 import pytest
 from decimal import Decimal
@@ -15,7 +11,7 @@ from datetime import date
 
 from apps.almacen.models import MovimientoInventario
 from apps.almacen.services import registrar_entrada
-from apps.ventas.models import FacturaVenta, DetalleFacturaVenta, Cobro
+from apps.ventas.models import FacturaVenta, DetalleFacturaVenta, Cobro, ListaPrecio, DetalleLista
 from apps.core.exceptions import EstadoInvalidoError, StockInsuficienteError
 
 
@@ -34,24 +30,34 @@ def _dar_stock(producto, cantidad, costo_unitario, referencia='INICIAL'):
     producto.refresh_from_db()
 
 
+def _crear_lista_con_precio(producto, precio='10.00'):
+    """Crea una lista de precios aprobada para el producto."""
+    lista = ListaPrecio.objects.create(nombre='Lista Test', activa=True)
+    DetalleLista.objects.create(
+        lista=lista, producto=producto, precio=Decimal(precio),
+        vigente_desde=date.today(), aprobado=True
+    )
+    return lista
+
+
 def _crear_factura_venta(cliente, producto, cantidad, precio_unitario,
-                          numero='VTA-0001'):
+                          numero='VTA-0001', lista_precio=None):
     """
     Crea FacturaVenta en estado EMITIDA con un solo detalle.
-    NOTA: en este sistema la factura nace en EMITIDA pero el descuento
-    de stock se ejecuta explícitamente llamando a factura.emitir().
     """
     factura = FacturaVenta.objects.create(
         numero=numero,
         cliente=cliente,
         fecha=date.today(),
         estado='EMITIDA',
+        lista_precio=lista_precio,
     )
+    # Se inicializa con precio_unitario=0 para dejar que emitir() lo asigne desde la lista
     DetalleFacturaVenta.objects.create(
         factura=factura,
         producto=producto,
         cantidad=Decimal(str(cantidad)),
-        precio_unitario=Decimal(str(precio_unitario)),
+        precio_unitario=Decimal('0'),
     )
     factura.refresh_from_db()
     return factura
@@ -68,9 +74,11 @@ def test_emitir_factura_descuenta_stock(cliente, producto_pt):
     emitir() debe dejar stock=30 y crear 1 MovimientoInventario SALIDA.
     """
     _dar_stock(producto_pt, cantidad=50, costo_unitario='5.00')
+    lista = _crear_lista_con_precio(producto_pt, precio='10.00')
 
     factura = _crear_factura_venta(cliente, producto_pt,
-                                   cantidad=20, precio_unitario='10.00')
+                                   cantidad=20, precio_unitario='10.00',
+                                   lista_precio=lista)
     factura.emitir()
 
     producto_pt.refresh_from_db()
@@ -93,9 +101,11 @@ def test_emitir_sin_stock_bloqueado(cliente, producto_pt):
     emitir() debe lanzar StockInsuficienteError y stock debe permanecer en 5.
     """
     _dar_stock(producto_pt, cantidad=5, costo_unitario='5.00')
+    lista = _crear_lista_con_precio(producto_pt)
 
     factura = _crear_factura_venta(cliente, producto_pt,
-                                   cantidad=10, precio_unitario='10.00')
+                                   cantidad=10, precio_unitario='10.00',
+                                   lista_precio=lista)
 
     with pytest.raises(StockInsuficienteError):
         factura.emitir()
@@ -117,9 +127,11 @@ def test_emitir_idempotente(cliente, producto_pt):
       - Exactamente 1 MovimientoInventario SALIDA.
     """
     _dar_stock(producto_pt, cantidad=50, costo_unitario='5.00')
+    lista = _crear_lista_con_precio(producto_pt)
 
     factura = _crear_factura_venta(cliente, producto_pt,
-                                   cantidad=20, precio_unitario='10.00')
+                                   cantidad=20, precio_unitario='10.00',
+                                   lista_precio=lista)
     factura.emitir()
 
     with pytest.raises(EstadoInvalidoError):
@@ -145,9 +157,11 @@ def test_marcar_cobrada_flujo_completo(cliente, producto_pt):
     Registrar cobro de 100.00 → marcar_cobrada() debe cambiar estado a COBRADA.
     """
     _dar_stock(producto_pt, cantidad=50, costo_unitario='5.00')
+    lista = _crear_lista_con_precio(producto_pt, precio='10.00')
 
     factura = _crear_factura_venta(cliente, producto_pt,
-                                   cantidad=10, precio_unitario='10.00')
+                                   cantidad=10, precio_unitario='10.00',
+                                   lista_precio=lista)
     factura.emitir()
     factura.refresh_from_db()
 
@@ -177,9 +191,11 @@ def test_marcar_cobrada_saldo_pendiente(cliente, producto_pt):
     marcar_cobrada() debe lanzar EstadoInvalidoError (saldo pendiente: 50).
     """
     _dar_stock(producto_pt, cantidad=50, costo_unitario='5.00')
+    lista = _crear_lista_con_precio(producto_pt, precio='10.00')
 
     factura = _crear_factura_venta(cliente, producto_pt,
-                                   cantidad=10, precio_unitario='10.00')
+                                   cantidad=10, precio_unitario='10.00',
+                                   lista_precio=lista)
     factura.emitir()
     factura.refresh_from_db()
 

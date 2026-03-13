@@ -2,10 +2,14 @@
 trigger: always_on
 ---
 
+---
+trigger: always_on
+---
+
 # REGLAS GLOBALES — Parte 1: Negocio y Datos
-**LacteOps ERP v3.0 — Marzo 2026**
+**LacteOps ERP v3.2 — Marzo 2026**
 Stack: Python 3.11 / Django 4.2 / PostgreSQL 15 | Moneda funcional: USD
-Continúa en: Parte 2 — Arquitectura y Sprint 1
+Continúa en: Parte 2 — Arquitectura y Sprint History
 
 ---
 
@@ -13,7 +17,7 @@ Continúa en: Parte 2 — Arquitectura y Sprint 1
 
 Reglas que aplican a todos los agentes sin excepción. Ningún agente puede desviarse aunque considere que existe una solución más conveniente. Son el contrato de negocio del sistema.
 
-La v3.0 incorpora las reglas permanentes del Sprint 1: bimoneda, tesorería, numeración automática y control de crédito. Las restricciones temporales (tasa BCV manual, aprobación dual pendiente, RBAC pendiente) viven únicamente en la guía del sprint correspondiente, no aquí.
+La v3.2 incorpora las reglas permanentes del Sprint 3: TasaCambio, CategoriaGasto, Socios/Préstamos, MovimientoTesoreria, permisos de reportes y orden del sidebar. Las restricciones temporales viven únicamente en la guía del sprint correspondiente.
 
 ---
 
@@ -33,7 +37,7 @@ Regla de normalización única e innegociable:
 
 Todo modelo transaccional con flujo de efectivo incluye tres campos obligatorios: `moneda` (USD/VES), `tasa_cambio` (Decimal 18,6), `monto_usd` (Decimal 18,2, `editable=False`, calculado en lógica de negocio).
 
-**Diferencial cambiario:** NO se registra por transacción individual. Se reconoce exclusivamente en la Reexpresión Mensual (ver Parte 2, sección 2.16).
+**Diferencial cambiario:** NO se registra por transacción individual. Se reconoce exclusivamente en la Reexpresión Mensual (ver Parte 2, §2.16).
 
 ---
 
@@ -60,17 +64,17 @@ En Recetas y Consumos de Orden de Producción la unidad del consumo debe coincid
 
 ## 2.4 Estados de Documentos y Transiciones
 
-| Documento | Flujo de estados | Regla |
+| Documento | Flujo | Regla |
 |---|---|---|
 | Factura de Compra | RECIBIDA → APROBADA / ANULADA | ANULADA solo si no fue APROBADA |
 | Factura de Venta | EMITIDA → COBRADA / ANULADA | Emisión ejecuta salida de inventario |
-| Orden de Producción | ABIERTA → CERRADA / ANULADA | ANULADA solo desde ABIERTA |
+| Orden de Producción | ABIERTA → CERRADA / ANULADA | CERRADA bloquea edición. Reapertura requiere Master/Administrador con motivo en AuditLog |
 | Ajuste de Inventario | BORRADOR → APROBADO / ANULADO | ANULADO solo desde BORRADOR |
 | Gasto / Servicio | PENDIENTE → PAGADO / ANULADO | PAGADO asigna `cuenta_pago` |
 | Transferencia | PENDIENTE → EJECUTADA / ANULADA | ANULADA genera movimientos inversos |
-| Cobro / Pago | Inmutable post-creación | Sin flujo de estados |
+| Préstamo de Socio | ACTIVO → CANCELADO / VENCIDO | CANCELADO cuando suma pagos >= monto_principal |
 
-Los cambios de estado se ejecutan mediante acciones del Admin que llaman a métodos de negocio (`emitir()`, `aprobar()`, `cerrar()`, `anular()`, `ejecutar()`). No se editan como campos de texto. Un documento cerrado o cobrado no puede modificarse ni anularse directamente.
+Los cambios de estado se ejecutan mediante métodos de negocio (`emitir()`, `aprobar()`, `cerrar()`, `anular()`, `ejecutar()`). No se editan como campos de texto.
 
 ---
 
@@ -86,23 +90,32 @@ Todo acceso a saldo o stock dentro de una transacción usa `select_for_update()`
 
 ## 2.6 Segregación de Funciones (RBAC)
 
-Sprint 0–1: autenticación estándar Django con superusuario. RBAC completo desde Sprint 2.
+| Grupo | Permisos clave |
+|---|---|
+| Master | Acceso total. Aprueba precios, ajustes y reexpresión. Reabre órdenes cerradas. |
+| Administrador | Igual que Master excepto gestión de usuarios y configuración técnica. |
+| Jefe Producción | CRUD Órdenes de Producción, aprobación de ajustes bajo umbral. |
+| Asistente Compras | CRUD Facturas de Compra y Gastos. Sin acceso a Ventas ni Tesorería. |
+| Asistente Ventas | CRUD Facturas de Venta con lista de precios activa y aprobada. Sin Compras ni Tesorería. |
 
-Aplica desde Sprint 0:
-- `stock_actual` y `costo_promedio` de `Producto` son `readonly` en el Admin.
-- `MovimientoInventario` y `MovimientoCaja` no son creables manualmente desde el Admin; solo los genera la lógica de negocio.
+- Permisos cargados vía `fixtures/rbac.json`, aplicado en signal `post_migrate` de `apps/core/apps.py`.
+- Decorador `require_group(*grupos)` en `apps/core/rbac.py`: verifica pertenencia → `PermissionDenied` si no cumple.
+- **Los reportes operativos son vistas Django protegidas con `@login_required`. El acceso se concede explícitamente en `rbac.json` a los grupos Master y Administrador. Ningún otro grupo ve reportes por defecto.**
+- **Umbral de aprobación dual:** `default=1000` USD. Ajustes por encima requieren Master o Administrador.
 
 ---
 
 ## 2.7 Separación de Responsabilidades entre Agentes
 
-| Agente | Responsabilidad | Restricción |
-|---|---|---|
-| Gemini 3.1 Pro High | models.py, migraciones, fixtures | Sin lógica de negocio |
-| Codex GPT 5.4 | Scaffolding, Admin, Jazzmin, estructura | Sin métodos de negocio; los deja como stubs |
-| Claude Sonnet 4.6 | services.py, métodos de modelos, tests QA | Sin modificar esquema de BD directamente |
+**Agentes disponibles Sprint 3:**
 
-Orden: Gemini → Claude → Codex. Cada agente recibe los archivos del anterior como contexto adjunto.
+| Agente | IDE | Responsabilidad | Restricción |
+|---|---|---|---|
+| Gemini Flash 3 | Antigravity | Modelos simples sin lógica: TasaCambio, CategoriaGasto, Socio | Sin métodos de negocio. Sin migraciones destructivas. |
+| Claude Sonnet 4.6 | Claude Code | Modelos complejos, services.py, correcciones, tests QA | Sin modificar esquema directamente |
+| Codex GPT 5.4 | Antigravity | Admin, Jazzmin, scaffolding, print, Task Scheduler | Sin métodos de negocio |
+
+**Handoff entre agentes:** cada agente escribe su entregable en un archivo `.md` o `.txt` en la raíz del proyecto con nombre `HANDOFF_<FASE>.md`. El agente siguiente lee ese archivo antes de iniciar. Ver guía del sprint para rutas exactas.
 
 ---
 
@@ -112,51 +125,99 @@ Formato: `PREFIJO-NNNN` con relleno de ceros (mínimo 4 dígitos). Modelo `Secue
 
 | Serie | Uso |
 |---|---|
-| VTA- | Facturas de Venta y CxC |
-| COM- | Facturas de Compra y CxP |
-| INV- | Ajustes de Inventario y conteos físicos |
+| VTA- | Facturas de Venta |
+| COM- | Facturas de Compra |
+| INV- | Ajustes de Inventario |
 | PRO- | Órdenes de Producción |
-| TES- | Cobros y Pagos directos |
-| APC- | Ajustes a Período Cerrado — única serie permitida post Soft/Hard Close |
+| TES- | Movimientos de Tesorería directos |
+| APC- | Gastos y Servicios |
+| SOC- | Préstamos de Socios ★ NUEVO v3.2 |
 
 **Reglas:**
 - `generar_numero(tipo_documento)` en `apps/core/services.py` con `select_for_update()` dentro de `transaction.atomic()`.
 - Campo `numero` en todos los modelos: `editable=False`, asignado en `save()` solo cuando `_state.adding == True`.
-- Numeración correlativa y continua. Un número asignado nunca se reutiliza aunque el documento sea anulado.
-- El documento anulado conserva su número con estado `ANULADO` visible.
+- Número asignado nunca se reutiliza aunque el documento sea anulado.
 
 ---
 
-## 2.17 Producción Conjunta ★ NUEVO v3.1
+## 2.17 Producción Conjunta ★ v3.1
 
 - `OrdenProduccion` siempre tiene una o más `SalidaOrden`. No existe FK directa a producto terminado.
-- Una Orden sin al menos una `SalidaOrden` con `es_subproducto=False` no puede cerrarse → `EstadoInvalidoError`.
-- **Fórmula de distribución de costo** para productos principales (`es_subproducto=False`):
+- Sin al menos una `SalidaOrden` con `es_subproducto=False` → `EstadoInvalidoError` al cerrar.
+- **Fórmula de distribución de costo:**
 ```
 valor_i          = salida_i.precio_referencia × salida_i.cantidad
 valor_total      = Σ valor_i  (solo no-subproductos)
 costo_asignado_i = costo_total × (valor_i / valor_total)
 ```
-
-- **Residuo de redondeo:** el último producto en la iteración (el de mayor `valor_i`) absorbe la diferencia entre `costo_total` y la suma de los demás `costo_asignado`. Esto garantiza que `Σ costo_asignado == costo_total` de forma exacta, sin tolerancias.
-- **Subproductos:** `costo_asignado = Decimal('0.000000')`. Entran al inventario con `costo_unitario = Decimal('0.000000')`.
-- El cierre registra una `EntradaInventario` por cada `SalidaOrden` dentro del mismo `transaction.atomic()`.
-
----
-
-## 2.18 Listas de Precio ★ NUEVO v3.1
-
-- Toda `FacturaVenta` tiene una `ListaPrecio` asignada al emitirse. No existe facturación sin lista.
-- `precio_unitario` en `DetalleFacturaVenta` es `editable=False`. Se asigna desde `DetalleLista.precio` al momento de emitir. Nunca se edita manualmente.
-- Si un producto no tiene `DetalleLista` con `aprobado=True` en la lista seleccionada → `EstadoInvalidoError` indicando qué producto.
-- Solo usuarios de grupo **Master** o **Administrador** pueden aprobar precios y crear nuevas listas.
-- `Asistente de Ventas` solo puede seleccionar listas activas con todos sus precios aprobados.
-- `precio_venta` en `Producto` es campo de referencia exclusivo para reportes (Capital de Trabajo). No interviene en facturación.
+- **Residuo de redondeo:** el producto con mayor `valor_i` absorbe la diferencia. `Σ costo_asignado == costo_total` exacto.
+- **Subproductos:** `costo_asignado = Decimal('0.000000')`.
+- Al cerrar: calcular `kg_totales_salida` y `rendimiento_real = kg_totales_salida / materia_prima_kg`.
 
 ---
 
-## Disposiciones Finales (aplican a todas las partes)
+## 2.18 Listas de Precio ★ v3.1
+
+- Toda `FacturaVenta` requiere `ListaPrecio` asignada al emitirse.
+- `precio_unitario` en `DetalleFacturaVenta` es `editable=False`. Se asigna desde `DetalleLista.precio` al emitir.
+- Producto sin `DetalleLista` con `aprobado=True` → `EstadoInvalidoError`.
+- Solo Master o Administrador aprueban precios y crean listas.
+
+---
+
+## 2.21 TasaCambio ★ NUEVO v3.2
+
+- Modelo `TasaCambio` en `apps/core/models.py`: `fecha` (DateField unique), `tasa` (Decimal 18,6), `fuente` (BCV_AUTO / BCV_MANUAL / USUARIO).
+- **Ningún documento puede guardar `tasa_cambio` sin antes consultar `TasaCambio.objects.filter(fecha__lte=fecha_doc).order_by('-fecha').first()`.**
+- Si no hay tasa: el formulario muestra la más reciente como sugerencia. El usuario puede aceptarla o corregirla.
+- El scraper histórico (`importar_historico_bcv`) puebla la tabla desde el inicio del histórico del BCV.
+- El management command `actualizar_tasa_bcv` corre diariamente a las 6am vía Windows Task Scheduler.
+- Backfill de días sin publicación: se llena con la tasa del día hábil siguiente.
+
+---
+
+## 2.22 CategoriaGasto ★ NUEVO v3.2
+
+- Árbol de dos niveles: categoría padre → subcategoría hija. FK self null=True.
+- Campo `contexto`: FACTURA (para GastoServicio) o TESORERIA (para MovimientoTesoreria). No mezclable.
+- `GastoServicio.categoria_gasto` es FK a `CategoriaGasto` (reemplaza CharField).
+- Categorías por defecto FACTURA: Electricidad, Agua, Gas, Mantenimiento, Transporte, Honorarios, Otro.
+
+---
+
+## 2.23 Socios y Préstamos ★ NUEVO v3.2
+
+- `Socio` es modelo independiente. No es `Proveedor`.
+- `PrestamoPorSocio`: pasivo de la empresa. Genera `MovimientoCaja ENTRADA` al registrarse si hay cuenta destino.
+- `PagoPrestamo`: genera `MovimientoCaja SALIDA` si hay cuenta origen.
+- Capital de Trabajo: préstamo es **pasivo corriente** si `fecha_vencimiento <= hoy + 365 días`, **no corriente** si mayor o si `None`.
+- CxP incluye préstamos de socios en aging con los mismos buckets 0-30, 31-60, 61-90, +90 días.
+
+---
+
+## 2.24 MovimientoTesoreria ★ NUEVO v3.2
+
+- Documento de origen para cargos/abonos directos sin factura.
+- **Siempre genera un `MovimientoCaja`** en la cuenta seleccionada dentro del mismo `transaction.atomic()`.
+- **Inmutable post-creación.** Mismo patrón que `MovimientoCaja`.
+- `categoria` FK a `CategoriaGasto` con `contexto == TESORERIA` obligatorio.
+- Genera voucher imprimible. Afecta saldo de cuenta y aparece en Capital de Trabajo.
+
+---
+
+## 2.25 Sidebar Jazzmin — Orden Canónico ★ NUEVO v3.2
+
+El sidebar debe respetar este orden en `JAZZMIN_SETTINGS['order_with_respect_to']`:
+```
+ventas → compras → produccion → almacen → bancos → socios → reportes → core → auth
+```
+Las secciones deben estar colapsadas por defecto (`navigation_expanded: False`).
+El modelo dummy `ReporteLink` nunca es visible en el sidebar (`has_module_perms` retorna False).
+
+---
+
+## Disposiciones Finales
 
 - Todas las modificaciones por `instance.save()`, nunca por `QuerySet.update()`.
 - `python manage.py check → 0 issues` es requisito de aceptación en cada fase de cada sprint.
-- Las reglas de este documento son permanentes. Las restricciones temporales de cada sprint viven solo en la guía del sprint.
+- Las reglas de este documento son permanentes. Las restricciones temporales viven solo en la guía del sprint.

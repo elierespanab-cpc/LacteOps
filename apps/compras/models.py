@@ -8,6 +8,7 @@ Lógica de negocio implementada:
   - FacturaCompra.anular(): solo permite anular facturas en estado RECIBIDA.
 """
 import logging
+from datetime import date
 from decimal import Decimal
 
 from django.db import models, transaction
@@ -50,6 +51,7 @@ class FacturaCompra(AuditableModel):
     numero = models.CharField(max_length=20, unique=True, verbose_name="Número de Factura")
     proveedor = models.ForeignKey(Proveedor, on_delete=models.PROTECT, verbose_name="Proveedor")
     fecha = models.DateField(verbose_name="Fecha")
+    fecha_vencimiento = models.DateField(null=True, blank=True, verbose_name="Fecha de Vencimiento")
     estado = models.CharField(max_length=15, choices=ESTADO_CHOICES, default='RECIBIDA', verbose_name="Estado")
     moneda = models.CharField(max_length=3, choices=MONEDA_CHOICES, default='USD', verbose_name="Moneda")
     tasa_cambio = models.DecimalField(max_digits=18, decimal_places=6, default=1.000000, verbose_name="Tasa de Cambio (VES/USD)")
@@ -248,6 +250,8 @@ class GastoServicio(AuditableModel):
     moneda = models.CharField(max_length=3, choices=MONEDA_CHOICES, default='USD', verbose_name="Moneda")
     tasa_cambio = models.DecimalField(max_digits=18, decimal_places=6, default=Decimal('1.000000'), verbose_name="Tasa de Cambio (VES/USD)")
     monto_usd = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal('0.00'), editable=False, verbose_name="Monto en USD")
+    fecha_emision = models.DateField(default=date.today, verbose_name="Fecha de Emisión")
+    fecha_vencimiento = models.DateField(null=True, blank=True, verbose_name="Fecha de Vencimiento")
     estado = models.CharField(max_length=15, choices=ESTADO_CHOICES, default='PENDIENTE', verbose_name="Estado")
     cuenta_pago = models.ForeignKey('bancos.CuentaBancaria', on_delete=models.PROTECT, null=True, blank=True, verbose_name="Cuenta de Pago")
 

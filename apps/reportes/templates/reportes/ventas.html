@@ -1,0 +1,95 @@
+{% extends 'reportes/base_reporte.html' %}
+{% load humanize %}
+
+{% block report_title %}
+    Reporte Operativo de Ventas
+    <br><small>
+        {% if fecha_desde %}Desde: {{ fecha_desde }} {% endif %}
+        {% if fecha_hasta %}Hasta: {{ fecha_hasta }} {% endif %}
+    </small>
+{% endblock %}
+
+{% block content %}
+<div class="no-print filters">
+    <form method="get">
+        <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
+        <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}"></label>
+        <br>
+        <label>Clientes: 
+            <select name="cliente" multiple>
+                {% for c in clientes %}
+                <option value="{{ c.id }}" {% if c.id|stringformat:"i" in request.GET|default:'' %}selected{% endif %}>{{ c.razon_social }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Artículos: 
+            <select name="articulo" multiple>
+                {% for p in productos %}
+                <option value="{{ p.id }}">{{ p.nombre }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label><input type="checkbox" name="agrupar_por_cliente" value="1" {% if agrupar_por_cliente %}checked{% endif %}> Agrupar por Cliente</label>
+        <button type="submit">Generar Reporte</button>
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Número</th>
+            <th>Fecha</th>
+            <th>Cliente</th>
+            <th>Articulo</th>
+            <th class="text-right">Cant.</th>
+            <th class="text-right">Precio Unit.</th>
+            <th class="text-right">Subtotal</th>
+            <th class="text-right">Moneda</th>
+            <th class="text-right">Monto USD</th>
+            <th class="text-center">Estado</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% regroup detalles by factura.cliente as clientes_group %}
+        {% for grupo in clientes_group %}
+            {% if agrupar_por_cliente %}
+            <tr class="group-header">
+                <td colspan="10">Cliente: {{ grupo.grouper.razon_social }} (RIF: {{ grupo.grouper.rif }})</td>
+            </tr>
+            {% endif %}
+            
+            {% for d in grupo.list %}
+            <tr>
+                <td>{{ d.factura.numero }}</td>
+                <td>{{ d.factura.fecha|date:"Y-m-d" }}</td>
+                <td>{{ d.factura.cliente.razon_social }}</td>
+                <td>{{ d.producto.codigo }} - {{ d.producto.nombre }}</td>
+                <td class="text-right">{{ d.cantidad|intcomma }}</td>
+                <td class="text-right">{{ d.precio_unitario|intcomma }}</td>
+                <td class="text-right">{{ d.subtotal|intcomma }}</td>
+                <td class="text-right">{{ d.factura.moneda }}</td>
+                <td class="text-right">
+                    {% if d.factura.moneda == 'USD' %}
+                        {{ d.subtotal|intcomma }}
+                    {% else %}
+                        {# Para el reporte de items no lo dividimos aqui pk es complejo, pero Factura totaliza. Simulamos monto usd aproximado si es un campo. #}
+                        {# Por simplicidad usamos subtotal_usd que asume paridad o un calc en el front if no está, o el subtotal de la linea dividido por tasa_cambio. #}
+                        {% if d.factura.tasa_cambio > 0 %}
+                            {% widthratio d.subtotal d.factura.tasa_cambio 1 as monto_usd_aprox %}
+                            {{ monto_usd_aprox|intcomma }}*
+                        {% else %}
+                            0.00
+                        {% endif %}
+                    {% endif %}
+                </td>
+                <td class="text-center">{{ d.factura.estado }}</td>
+            </tr>
+            {% endfor %}
+        {% empty %}
+        <tr>
+            <td colspan="10" class="text-center">No se encontraron registros para los filtros seleccionados.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

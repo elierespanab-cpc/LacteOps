@@ -313,7 +313,7 @@ def test_transferencia_exitosa(cuenta_usd, cuenta_destino_usd, secuencia_tes):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.django_db
-def test_reexpresion_mensual_calcula_variacion(cuenta_ves):
+def test_reexpresion_mensual_calcula_variacion(cuenta_ves, usuario):
     """
     Cuenta VES con saldo=600 000.
     tasa_inicio=60, tasa_cierre=50 → el bolívar se apreció.
@@ -331,6 +331,7 @@ def test_reexpresion_mensual_calcula_variacion(cuenta_ves):
         tasa_inicio_mes=Decimal('60.000000'),
         tasa_cierre=Decimal('50.000000'),
         fecha_cierre=fecha_cierre,
+        usuario=usuario,
     )
 
     assert len(movimientos) == 1
@@ -347,7 +348,7 @@ def test_reexpresion_mensual_calcula_variacion(cuenta_ves):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.django_db
-def test_reexpresion_mensual_idempotente(cuenta_ves):
+def test_reexpresion_mensual_idempotente(cuenta_ves, usuario):
     """
     Ejecutar ReexpresionMensual dos veces para el mismo mes-año debe lanzar
     ValueError en la segunda llamada.
@@ -358,11 +359,13 @@ def test_reexpresion_mensual_idempotente(cuenta_ves):
         tasa_inicio_mes=Decimal('60.000000'),
         tasa_cierre=Decimal('50.000000'),
         fecha_cierre=fecha_cierre,
+        usuario=usuario,
     )
 
-    with pytest.raises(ValueError, match='Ya existe una Reexpresión Mensual'):
+    with pytest.raises(EstadoInvalidoError, match='Período ya reexpresado'):
         ReexpresionMensual.ejecutar(
             tasa_inicio_mes=Decimal('50.000000'),
             tasa_cierre=Decimal('45.000000'),
             fecha_cierre=fecha_cierre,
+            usuario=usuario,
         )

@@ -1,0 +1,88 @@
+{% extends 'reportes/base_reporte.html' %}
+{% load humanize %}
+
+{% block report_title %}
+    Reporte de Gastos y Servicios
+    <br><small>
+        {% if fecha_desde %}Desde: {{ fecha_desde }} {% endif %}
+        {% if fecha_hasta %}Hasta: {{ fecha_hasta }} {% endif %}
+    </small>
+{% endblock %}
+
+{% block content %}
+<div class="no-print filters">
+    <form method="get">
+        <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
+        <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}"></label>
+        <label>Categorías: 
+            <select name="categoria" multiple>
+                {% for c in todas_categorias %}
+                <option value="{{ c }}">{{ c }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Estado:
+            <select name="estado">
+                <option value="">Todos</option>
+                <option value="PENDIENTE" {% if request.GET.estado == 'PENDIENTE' %}selected{% endif %}>Pendiente</option>
+                <option value="PAGADO" {% if request.GET.estado == 'PAGADO' %}selected{% endif %}>Pagado</option>
+                <option value="ANULADO" {% if request.GET.estado == 'ANULADO' %}selected{% endif %}>Anulado</option>
+            </select>
+        </label>
+        <button type="submit">Generar Reporte</button>
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Número</th>
+            <th>Proveedor</th>
+            <th>Categoría</th>
+            <th>Descripción</th>
+            <th class="text-right">Monto Original</th>
+            <th>Moneda</th>
+            <th class="text-right">Monto USD</th>
+            <th class="text-center">Estado</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% regroup gastos by categoria_gasto as cat_group %}
+        {% for grupo in cat_group %}
+            <tr class="group-header">
+                <td colspan="8">{{ grupo.grouper }}</td>
+            </tr>
+            {% for g in grupo.list %}
+            <tr>
+                <td>{{ g.numero }}</td>
+                <td>{{ g.proveedor.razon_social }}</td>
+                <td>{{ g.categoria_gasto }}</td>
+                <td>{{ g.descripcion }}</td>
+                <td class="text-right">{{ g.monto|intcomma }}</td>
+                <td>{{ g.moneda }}</td>
+                <td class="text-right">{{ g.monto_usd|intcomma }}</td>
+                <td class="text-center">{{ g.estado }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="6" class="text-right">Total {{ grupo.grouper }}:</td>
+                <td class="text-right">
+                    {# This isn't strictly necessary dynamically if we only need general total, but we can do a sum here. Django templates are limited. #}
+                    {# As we pre-calculated general total in python, for subtitles we can skip or use custom tags. A simple general total is standard. #}
+                    -
+                </td>
+                <td></td>
+            </tr>
+        {% empty %}
+        <tr>
+            <td colspan="8" class="text-center">No se encontraron registros.</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+            <td colspan="6" class="text-right">Total General USD:</td>
+            <td class="text-right">{{ total_usd|intcomma }}</td>
+            <td></td>
+        </tr>
+    </tbody>
+</table>
+{% endblock %}

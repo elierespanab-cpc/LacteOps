@@ -278,8 +278,21 @@ class DetalleFacturaVenta(AuditableModel):
     def save(self, *args, **kwargs):
         """
         Calcula el subtotal de la línea y recalcula el total de la cabecera.
+        Intenta obtener el precio de la lista de la factura si aún no está fijado.
         """
-        self.subtotal = Decimal(str(self.cantidad)) * Decimal(str(self.precio_unitario))
+        if (self.precio_unitario is None or self.precio_unitario == Decimal('0')) and self.factura.lista_precio:
+            # Importar localmente para evitar problemas de orden de carga si fuera necesario
+            from .models import DetalleLista
+            dl = DetalleLista.objects.filter(
+                lista=self.factura.lista_precio,
+                producto=self.producto,
+                aprobado=True
+            ).first()
+            if dl:
+                self.precio_unitario = dl.precio
+
+        precio = self.precio_unitario if self.precio_unitario is not None else Decimal('0.000000')
+        self.subtotal = Decimal(str(self.cantidad)) * Decimal(str(precio))
         super().save(*args, **kwargs)
 
         # Recalcular el total de la factura cabecera
