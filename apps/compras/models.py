@@ -6,10 +6,12 @@ Lógica de negocio implementada:
   - DetalleFacturaCompra.save(): auto-calcula subtotal y recalcula total de cabecera.
   - FacturaCompra.aprobar(): registra entradas al Kardex en USD, cambia estado.
   - FacturaCompra.anular(): solo permite anular facturas en estado RECIBIDA.
+  - Pago.registrar(): calcula monto_usd con bimoneda y genera MovimientoCaja.
+  - GastoServicio.pagar(): calcula monto_usd con bimoneda y genera MovimientoCaja.
 """
 import logging
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import models, transaction
 
@@ -65,6 +67,12 @@ class FacturaCompra(AuditableModel):
 
     def __str__(self):
         return f"Factura Compra {self.numero} - {self.proveedor.nombre}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.numero:
+            from apps.core.services import generar_numero
+            self.numero = generar_numero('COM')
+        super().save(*args, **kwargs)
 
     def get_saldo_pendiente(self):
         total_pagado = self.pagos.aggregate(
@@ -194,44 +202,50 @@ class Pago(AuditableModel):
         Registra la salida de caja correspondiente a este pago en cuenta_origen.
         Solo actúa si cuenta_origen está definida.
 
-        Calcula monto_usd correctamente; no acepta el valor del caller sin recalcular.
+        Bimoneda (B5+B6): calcula monto_usd directamente sin depender de convertir_a_usd:
+          - VES con tasa > 0: monto_usd = monto / tasa_cambio
+          - USD: monto_usd = monto (tasa_cambio forzada a 1)
+        Garantiza atomicidad y bloqueo de la cuenta con select_for_update().
         """
         if not self.cuenta_origen:
             return  # Pago sin cuenta vinculada: solo registro contable, no movimiento caja
 
         from apps.bancos.services import registrar_movimiento_caja
-        from apps.almacen.services import convertir_a_usd as _conv
+        from apps.bancos.models import CuentaBancaria
 
-        monto_usd = _conv(self.monto, self.moneda, self.tasa_cambio)
+        monto = Decimal(str(self.monto))
+        tasa = Decimal(str(self.tasa_cambio))
 
-        registrar_movimiento_caja(
-            cuenta=self.cuenta_origen,
-            tipo='SALIDA',
-            monto=Decimal(str(self.monto)),
-            moneda=self.moneda,
-            tasa_cambio=Decimal(str(self.tasa_cambio)),
-            referencia=f'PAGO-{self.factura.numero}',
-            notas=f'Pago factura compra {self.factura.numero}',
-        )
-        # Guardar monto_usd calculado
-        self.monto_usd = monto_usd
-        self.save(update_fields=['monto_usd'])
+        # Bimoneda — cálculo explícito de monto_usd
+        if self.moneda == 'VES' and tasa > Decimal('0'):
+            monto_usd = (monto / tasa).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        else:
+            # USD (o VES sin tasa): monto se trata directo en USD
+            monto_usd = monto.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            tasa = Decimal('1.000000')
+
+        with transaction.atomic():
+            # Bloquear la cuenta para evitar saldo negativo concurrente
+            cuenta = CuentaBancaria.objects.select_for_update().get(pk=self.cuenta_origen_id)
+            registrar_movimiento_caja(
+                cuenta=cuenta,
+                tipo='SALIDA',
+                monto=monto,
+                moneda=self.moneda,
+                tasa_cambio=tasa,
+                referencia=f'PAGO-{self.factura.numero}',
+                notas=f'Pago factura compra {self.factura.numero}',
+            )
+            self.monto_usd = monto_usd
+            self.save(update_fields=['monto_usd'])
+
         logger.info(
             'Pago registrado | Factura: %s | Cuenta: %s | Monto: %s %s | USD: %s',
-            self.factura.numero, self.cuenta_origen, self.monto, self.moneda, monto_usd
+            self.factura.numero, self.cuenta_origen, monto, self.moneda, monto_usd
         )
 
 
 class GastoServicio(AuditableModel):
-    CATEGORIA_CHOICES = [
-        ('Electricidad', 'Electricidad'),
-        ('Agua', 'Agua'),
-        ('Gas', 'Gas'),
-        ('Mantenimiento', 'Mantenimiento'),
-        ('Transporte', 'Transporte'),
-        ('Honorarios', 'Honorarios'),
-        ('Otro', 'Otro'),
-    ]
     ESTADO_CHOICES = [
         ('PENDIENTE', 'Pendiente'),
         ('PAGADO', 'Pagado'),
@@ -244,7 +258,9 @@ class GastoServicio(AuditableModel):
 
     numero = models.CharField(max_length=20, unique=True, editable=False, verbose_name="Número de Gasto")
     proveedor = models.ForeignKey(Proveedor, on_delete=models.PROTECT, verbose_name="Proveedor")
-    categoria_gasto = models.CharField(max_length=25, choices=CATEGORIA_CHOICES, verbose_name="Categoría de Gasto")
+    categoria_gasto = models.ForeignKey(
+        'core.CategoriaGasto', on_delete=models.PROTECT,
+        null=True, blank=True, verbose_name='Categoría')
     descripcion = models.TextField(verbose_name="Descripción")
     monto = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Monto")
     moneda = models.CharField(max_length=3, choices=MONEDA_CHOICES, default='USD', verbose_name="Moneda")
@@ -262,6 +278,12 @@ class GastoServicio(AuditableModel):
 
     def __str__(self):
         return f"Gasto {self.numero} - {self.proveedor.nombre}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.numero:
+            from apps.core.services import generar_numero
+            self.numero = generar_numero('APC')
+        super().save(*args, **kwargs)
 
     def pagar(self, cuenta_bancaria, monto, moneda, tasa_cambio):
         """
@@ -285,26 +307,33 @@ class GastoServicio(AuditableModel):
             raise EstadoInvalidoError('Gasto/Servicio', self.estado, 'pagar')
 
         from apps.bancos.services import registrar_movimiento_caja
-        from apps.almacen.services import convertir_a_usd as _conv
+        from apps.bancos.models import CuentaBancaria
 
         monto = Decimal(str(monto))
         tasa_cambio = Decimal(str(tasa_cambio))
-        monto_usd = _conv(monto, moneda, tasa_cambio)
 
-        registrar_movimiento_caja(
-            cuenta=cuenta_bancaria,
-            tipo='SALIDA',
-            monto=monto,
-            moneda=moneda,
-            tasa_cambio=tasa_cambio,
-            referencia=self.numero,
-            notas=f'Pago Gasto {self.numero}: {self.descripcion[:80]}',
-        )
+        # Bimoneda — cálculo explícito de monto_usd
+        if moneda == 'VES' and tasa_cambio > Decimal('0'):
+            monto_usd = (monto / tasa_cambio).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        else:
+            monto_usd = monto.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            tasa_cambio = Decimal('1.000000')
 
-        self.monto_usd = monto_usd
-        self.cuenta_pago = cuenta_bancaria
-        self.estado = 'PAGADO'
-        self.save(update_fields=['monto_usd', 'cuenta_pago', 'estado'])
+        with transaction.atomic():
+            cuenta = CuentaBancaria.objects.select_for_update().get(pk=cuenta_bancaria.pk)
+            registrar_movimiento_caja(
+                cuenta=cuenta,
+                tipo='SALIDA',
+                monto=monto,
+                moneda=moneda,
+                tasa_cambio=tasa_cambio,
+                referencia=self.numero,
+                notas=f'Pago Gasto {self.numero}: {self.descripcion[:80]}',
+            )
+            self.monto_usd = monto_usd
+            self.cuenta_pago = cuenta_bancaria
+            self.estado = 'PAGADO'
+            self.save(update_fields=['monto_usd', 'cuenta_pago', 'estado'])
 
         logger.info(
             'GastoServicio %s PAGADO | Cuenta: %s | Monto: %s %s | USD: %s.',

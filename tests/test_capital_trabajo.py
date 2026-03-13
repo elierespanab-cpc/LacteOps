@@ -8,7 +8,11 @@ from apps.almacen.models import Producto
 
 @pytest.fixture
 def user_viewer(db):
+    """Usuario con permiso view_reportelink (B9 — acceso a reportes)."""
+    from django.contrib.auth.models import Permission
     user = User.objects.create_user(username='viewer', password='123')
+    perm = Permission.objects.get(codename='view_reportelink', content_type__app_label='reportes')
+    user.user_permissions.add(perm)
     return user
 
 @pytest.mark.django_db

@@ -6,6 +6,7 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 
 from apps.produccion.models import Receta, RecetaDetalle, OrdenProduccion, ConsumoOP
+from apps.almacen.models import Producto
 from apps.core.exceptions import LacteOpsError
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,11 @@ logger = logging.getLogger(__name__)
 class RecetaDetalleInline(admin.TabularInline):
     model = RecetaDetalle
     extra = 1
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "materia_prima":
+            kwargs["queryset"] = Producto.objects.filter(activo=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(Receta)
@@ -30,6 +36,11 @@ class ConsumoOPInline(admin.TabularInline):
     readonly_fields = ("costo_unitario", "subtotal")
     # El operador puede ajustar cantidades antes del cierre
     fields = ("producto", "unidad_medida", "cantidad_consumida", "costo_unitario", "subtotal")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "producto":
+            kwargs["queryset"] = Producto.objects.filter(activo=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
     def get_extra(self, request, obj=None, **kwargs):
         if obj is None:
@@ -97,6 +108,11 @@ class SalidaOrdenInline(admin.TabularInline):
     model = SalidaOrden
     extra = 0
     readonly_fields = ("costo_asignado",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "producto":
+            kwargs["queryset"] = Producto.objects.filter(activo=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 _orden_admin = admin.site._registry.get(OrdenProduccion)

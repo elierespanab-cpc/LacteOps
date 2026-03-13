@@ -1,0 +1,53 @@
+
+--- Validaxion de Reportes (HTTP 200) ---
+Ventas: EXCEPTION - Template: C:\Users\elier\Documents\Desarollos\LacteOps\apps\reportes\templates\reportes\ventas.html, 'humanize' is not a registered tag library. Must be one of:
+admin_list
+admin_modify
+admin_urls
+auth
+cache
+i18n
+jazzmin
+l10n
+log
+static
+tz
+CxC: EXCEPTION - Template: C:\Users\elier\Documents\Desarollos\LacteOps\apps\reportes\templates\reportes\cxc.html, 'humanize' is not a registered tag library. Must be one of:
+admin_list
+admin_modify
+admin_urls
+auth
+cache
+i18n
+jazzmin
+l10n
+log
+static
+tz
+Compras: EXCEPTION - Template: C:\Users\elier\Documents\Desarollos\LacteOps\apps\reportes\templates\reportes\compras.html, 'humanize' is not a registered tag library. Must be one of:
+admin_list
+admin_modify
+admin_urls
+auth
+cache
+i18n
+jazzmin
+l10n
+log
+static
+tz
+CxP: EXCEPTION - Cannot resolve keyword 'fecha_emision' into field. Choices are: categoria_gasto, cuenta_pago, cuenta_pago_id, descripcion, estado, id, moneda, monto, monto_usd, numero, proveedor, proveedor_id, tasa_cambio
+Produccion: EXCEPTION - Template: C:\Users\elier\Documents\Desarollos\LacteOps\apps\reportes\templates\reportes\produccion.html, 'humanize' is not a registered tag library. Must be one of:
+admin_list
+admin_modify
+admin_urls
+auth
+cache
+i18n
+jazzmin
+l10n
+log
+static
+tz
+Gastos: EXCEPTION - Cannot resolve keyword 'fecha_emision' into field. Choices are: categoria_gasto, cuenta_pago, cuenta_pago_id, descripcion, estado, id, moneda, monto, monto_usd, numero, proveedor, proveedor_id, tasa_cambio
+Capital de Trabajo: EXCEPTION - Cannot resolve keyword 'fecha_emision' into field. Choices are: categoria_gasto, cuenta_pago, cuenta_pago_id, descripcion, estado, id, moneda, monto, monto_usd, numero, proveedor, proveedor_id, tasa_cambio

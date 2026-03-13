@@ -26,6 +26,11 @@ class DetalleFacturaVentaInline(admin.TabularInline):
     extra = 3
     readonly_fields = ("subtotal",)
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "producto":
+            kwargs["queryset"] = Producto.objects.filter(activo=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 class CobroInline(admin.TabularInline):
     model = Cobro
@@ -96,6 +101,11 @@ from apps.ventas.services import aprobar_precio
 class DetalleListaInline(admin.TabularInline):
     model = DetalleLista
     extra = 1
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "producto":
+            kwargs["queryset"] = Producto.objects.filter(activo=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(ListaPrecio)

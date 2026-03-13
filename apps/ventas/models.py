@@ -10,7 +10,7 @@ Lógica de negocio implementada:
 """
 import logging
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import models, transaction
 from django.conf import settings
@@ -121,8 +121,7 @@ class FacturaVenta(AuditableModel):
     def save(self, *args, **kwargs):
         """
         Override de save():
-          - En una CREACIÓN nueva con estado EMITIDA: guarda primero para
-            obtener PK (necesario para los detalles), luego invoca emitir().
+          - B7: Si es una creación y no tiene número, genera uno automáticamente (VTA).
           - En actualizaciones: comportamiento normal de AuditableModel.
 
         Nota: La llamada a emitir() en la creación ocurre DESPUÉS de que
@@ -134,6 +133,9 @@ class FacturaVenta(AuditableModel):
           2. Guardar detalles (auto-calcula subtotales y total).
           3. Ejecutar la action "emitir" desde el Admin para disparar las salidas.
         """
+        if self._state.adding and not self.numero:
+            from apps.core.services import generar_numero
+            self.numero = generar_numero('VTA')
         super().save(*args, **kwargs)
 
     def emitir(self):
@@ -335,30 +337,44 @@ class Cobro(AuditableModel):
         Registra la entrada de caja correspondiente a este cobro en cuenta_destino.
         Solo actúa si cuenta_destino está definida.
 
-        Calcula monto_usd internamente; no acepta el valor del caller sin recalcular.
+        Bimoneda (B5+B6): calcula monto_usd directamente sin depender de convertir_a_usd:
+          - VES con tasa > 0: monto_usd = monto / tasa_cambio
+          - USD: monto_usd = monto (tasa_cambio forzada a 1)
+        Garantiza atomicidad y bloqueo de la cuenta con select_for_update().
         """
         if not self.cuenta_destino:
             return  # Cobro sin cuenta vinculada: solo registro contable, no movimiento caja
 
         from apps.bancos.services import registrar_movimiento_caja
-        from apps.almacen.services import convertir_a_usd as _conv
+        from apps.bancos.models import CuentaBancaria
 
-        monto_usd = _conv(self.monto, self.moneda, self.tasa_cambio)
+        monto = Decimal(str(self.monto))
+        tasa = Decimal(str(self.tasa_cambio))
 
-        registrar_movimiento_caja(
-            cuenta=self.cuenta_destino,
-            tipo='ENTRADA',
-            monto=Decimal(str(self.monto)),
-            moneda=self.moneda,
-            tasa_cambio=Decimal(str(self.tasa_cambio)),
-            referencia=f'COBRO-{self.factura.numero}',
-            notas=f'Cobro factura venta {self.factura.numero}',
-        )
-        # Guardar monto_usd calculado
-        self.monto_usd = monto_usd
-        self.save(update_fields=['monto_usd'])
+        # Bimoneda — cálculo explícito de monto_usd
+        if self.moneda == 'VES' and tasa > Decimal('0'):
+            monto_usd = (monto / tasa).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        else:
+            monto_usd = monto.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            tasa = Decimal('1.000000')
+
+        with transaction.atomic():
+            # Bloquear la cuenta para evitar saldo concurrente incorrecto
+            cuenta = CuentaBancaria.objects.select_for_update().get(pk=self.cuenta_destino_id)
+            registrar_movimiento_caja(
+                cuenta=cuenta,
+                tipo='ENTRADA',
+                monto=monto,
+                moneda=self.moneda,
+                tasa_cambio=tasa,
+                referencia=f'COBRO-{self.factura.numero}',
+                notas=f'Cobro factura venta {self.factura.numero}',
+            )
+            self.monto_usd = monto_usd
+            self.save(update_fields=['monto_usd'])
+
         logger.info(
             'Cobro registrado | Factura: %s | Cuenta: %s | Monto: %s %s | USD: %s',
-            self.factura.numero, self.cuenta_destino, self.monto, self.moneda, monto_usd
+            self.factura.numero, self.cuenta_destino, monto, self.moneda, monto_usd
         )
 

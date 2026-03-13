@@ -30,6 +30,25 @@ class ProductoAdmin(admin.ModelAdmin):
     readonly_fields = ("stock_actual", "costo_promedio")
     search_fields = ("codigo", "nombre")
     list_filter = ("activo", "es_materia_prima", "es_producto_terminado", "categoria")
+    actions = ["desactivar_productos", "activar_productos"]
+
+    def desactivar_productos(self, request, queryset):
+        rows_updated = queryset.update(activo=False)
+        if rows_updated == 1:
+            message_bit = "1 producto fue desactivado"
+        else:
+            message_bit = f"{rows_updated} productos fueron desactivados"
+        self.message_user(request, f"{message_bit} exitosamente.")
+    desactivar_productos.short_description = "Desactivar productos seleccionados (Archivar)"
+
+    def activar_productos(self, request, queryset):
+        rows_updated = queryset.update(activo=True)
+        if rows_updated == 1:
+            message_bit = "1 producto fue activado"
+        else:
+            message_bit = f"{rows_updated} productos fueron activados"
+        self.message_user(request, f"{message_bit} exitosamente.")
+    activar_productos.short_description = "Activar productos seleccionados"
 
     @admin.display(description="Unidad")
     def unidad_medida_simbolo(self, obj):
@@ -50,7 +69,9 @@ class MovimientoInventarioAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        return False
+        # Permitir para que el Collector de Django no bloquee la vista de eliminación de Producto.
+        # El modelo MovimientoInventario sigue protegido por models.PROTECT y su método delete().
+        return request.user.is_superuser
 
     def has_view_permission(self, request, obj=None):
         return True
@@ -95,6 +116,11 @@ class AjusteInventarioAdmin(admin.ModelAdmin):
                 messages.error(request, f'Error inesperado en {obj}. Ver logs.')
 
     anular_ajustes.short_description = 'Anular ajustes seleccionados'
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "producto":
+            kwargs["queryset"] = Producto.objects.filter(activo=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 # --- Sprint 2: Botones de impresion ---
 from apps.almacen.models import MovimientoInventario, AjusteInventario

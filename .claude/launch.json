@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Django Dev Server",
+      "runtimeExecutable": "C:\\Users\\elier\\Documents\\Desarollos\\LacteOps\\venv\\Scripts\\python.exe",
+      "runtimeArgs": ["C:\\Users\\elier\\Documents\\Desarollos\\LacteOps\\manage.py", "runserver", "8000"],
+      "port": 8000
+    },
+    {
+      "name": "Waitress (Production)",
+      "runtimeExecutable": "C:\\Users\\elier\\Documents\\Desarollos\\LacteOps\\venv\\Scripts\\waitress-serve.exe",
+      "runtimeArgs": ["--port=8000", "erp_lacteo.wsgi:application"],
+      "port": 8000
+    }
+  ]
+}
