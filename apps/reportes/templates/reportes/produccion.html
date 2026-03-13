@@ -1,0 +1,71 @@
+{% extends 'reportes/base_reporte.html' %}
+{% load humanize %}
+
+{% block report_title %}
+    Reporte de Producción
+    <br><small>
+        {% if fecha_desde %}Desde: {{ fecha_desde }} {% endif %}
+        {% if fecha_hasta %}Hasta: {{ fecha_hasta }} {% endif %}
+    </small>
+{% endblock %}
+
+{% block content %}
+<div class="no-print filters">
+    <form method="get">
+        <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
+        <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}"></label>
+        <button type="submit">Generar Reporte</button>
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>No. Orden</th>
+            <th>Fecha</th>
+            <th>Estado</th>
+            <th class="text-right">Costo Total MP (USD)</th>
+            <th>Producto Obtenido</th>
+            <th class="text-right">Cant. Fìsica</th>
+            <th>Unidad</th>
+            <th class="text-right">Kg Totales</th>
+            <th class="text-right">Costo Asignado</th>
+            <th class="text-right">Costo Unitario USD</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for orden in ordenes %}
+            {% if orden.salidas.all %}
+                {% for sal in orden.salidas.all %}
+                <tr>
+                    {% if forloop.first %}
+                    <td rowspan="{{ orden.salidas.all|length }}">{{ orden.numero }}</td>
+                    <td rowspan="{{ orden.salidas.all|length }}">{{ orden.fecha_apertura|date:"Y-m-d" }}</td>
+                    <td rowspan="{{ orden.salidas.all|length }}">{{ orden.estado }}</td>
+                    <td rowspan="{{ orden.salidas.all|length }}" class="text-right">{{ orden.mp_total|intcomma }}</td>
+                    {% endif %}
+                    <td>{{ sal.producto.nombre }} {% if sal.es_subproducto %}(Subprod){% endif %}</td>
+                    <td class="text-right">{{ sal.cantidad|intcomma }}</td>
+                    <td>{{ sal.producto.unidad_medida.simbolo }}</td>
+                    <td class="text-right">{% if sal.kg_totales %}{{ sal.kg_totales|intcomma }}{% else %}-{% endif %}</td>
+                    <td class="text-right">{{ sal.costo_asignado|default:"0.00"|intcomma }}</td>
+                    <td class="text-right">{{ sal.cu|default:"0.0000"|intcomma }}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td>{{ orden.numero }}</td>
+                    <td>{{ orden.fecha_apertura|date:"Y-m-d" }}</td>
+                    <td>{{ orden.estado }}</td>
+                    <td class="text-right">{{ orden.mp_total|intcomma }}</td>
+                    <td colspan="6" class="text-center">Sin salidas registradas</td>
+                </tr>
+            {% endif %}
+        {% empty %}
+        <tr>
+            <td colspan="10" class="text-center">No se encontraron órdenes de producción en el rango.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

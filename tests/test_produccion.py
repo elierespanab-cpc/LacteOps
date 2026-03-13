@@ -2,13 +2,9 @@
 """
 test_produccion.py — Suite de pruebas para el módulo de Producción.
 
-Cubre:
-  - Pre-carga de consumos al crear OrdenProduccion.
-  - Cierre completo: consumo de MP, entrada de PT, costo_total y costo_promedio_pt.
-  - Bloqueo por stock insuficiente en cierre.
-  - Atomicidad del cierre (rollback total si falla un consumo).
-  - Anulación de OP abierta / bloqueo de OP cerrada.
-  - AuditLog registra el cambio de estado al cerrar.
+Actualizado para Sprint 2: el modelo Receta ya no tiene el campo
+`producto_terminado`. Los productos que produce una OP se modelan con
+SalidaOrden(es_subproducto=False). Los tests reflejan el nuevo contrato.
 """
 import pytest
 from decimal import Decimal
@@ -19,7 +15,7 @@ from apps.almacen.services import registrar_entrada
 from apps.core.exceptions import EstadoInvalidoError, StockInsuficienteError
 from apps.core.models import AuditLog
 from apps.produccion.models import (
-    OrdenProduccion, ConsumoOP, Receta, RecetaDetalle,
+    OrdenProduccion, ConsumoOP, Receta, RecetaDetalle, SalidaOrden,
 )
 
 
@@ -38,14 +34,20 @@ def _dar_stock(producto, cantidad, costo_unitario, referencia='INICIAL'):
     producto.refresh_from_db()
 
 
-def _crear_op(receta, numero='PRO-0001', cantidad_producida='80'):
+def _crear_op(receta, numero='PRO-0001'):
     """Crea una OrdenProduccion en estado ABIERTA."""
-    op = OrdenProduccion.objects.create(
-        numero=numero,
-        receta=receta,
-        cantidad_producida=Decimal(str(cantidad_producida)),
+    return OrdenProduccion.objects.create(numero=numero, receta=receta)
+
+
+def _agregar_salida_principal(op, producto, cantidad='80', precio_referencia='5.00'):
+    """Agrega una SalidaOrden de producto principal (no subproducto)."""
+    return SalidaOrden.objects.create(
+        orden=op,
+        producto=producto,
+        cantidad=Decimal(cantidad),
+        precio_referencia=Decimal(precio_referencia),
+        es_subproducto=False,
     )
-    return op
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -77,6 +79,7 @@ def test_cierre_op_flujo_completo(receta, producto_mp, producto_pt):
     """
     Stock MP=100, costo_promedio=10.
     OP produce 80 unidades de PT consumiendo 10 de MP.
+    Se registra la SalidaOrden del PT antes de cerrar.
 
     Verificaciones:
       - producto_mp.stock_actual == 90
@@ -88,7 +91,8 @@ def test_cierre_op_flujo_completo(receta, producto_mp, producto_pt):
     """
     _dar_stock(producto_mp, cantidad=100, costo_unitario='10.00')
 
-    op = _crear_op(receta, cantidad_producida='80')
+    op = _crear_op(receta)
+    _agregar_salida_principal(op, producto_pt, cantidad='80', precio_referencia='5.00')
     op.cerrar()
 
     op.refresh_from_db()
@@ -108,7 +112,7 @@ def test_cierre_op_flujo_completo(receta, producto_mp, producto_pt):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.django_db
-def test_cierre_op_stock_insuficiente(receta, producto_mp):
+def test_cierre_op_stock_insuficiente(receta, producto_mp, producto_pt):
     """
     Stock de MP=5, ConsumoOP requiere 10.
     cerrar() debe lanzar StockInsuficienteError y no crear movimientos.
@@ -116,6 +120,7 @@ def test_cierre_op_stock_insuficiente(receta, producto_mp):
     _dar_stock(producto_mp, cantidad=5, costo_unitario='10.00')
 
     op = _crear_op(receta)
+    _agregar_salida_principal(op, producto_pt)
 
     with pytest.raises(StockInsuficienteError):
         op.cerrar()
@@ -156,9 +161,9 @@ def test_cierre_op_atomico(categoria_lacteos, unidad_kg, producto_pt):
         es_materia_prima=True,
     )
 
+    # Sprint 2: Receta sin producto_terminado directo
     receta_doble = Receta.objects.create(
         nombre='Receta Doble',
-        producto_terminado=producto_pt,
         rendimiento_esperado=Decimal('90.00'),
     )
     RecetaDetalle.objects.create(
@@ -173,7 +178,12 @@ def test_cierre_op_atomico(categoria_lacteos, unidad_kg, producto_pt):
     op = OrdenProduccion.objects.create(
         numero='PRO-ATOM',
         receta=receta_doble,
-        cantidad_producida=Decimal('80'),
+    )
+    # Registrar salida principal antes de cerrar
+    SalidaOrden.objects.create(
+        orden=op, producto=producto_pt,
+        cantidad=Decimal('80'), precio_referencia=Decimal('5.00'),
+        es_subproducto=False,
     )
 
     with pytest.raises(StockInsuficienteError):
@@ -213,7 +223,7 @@ def test_anular_op_abierta(receta, producto_mp):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.django_db
-def test_anular_op_cerrada_bloqueado(receta, producto_mp):
+def test_anular_op_cerrada_bloqueado(receta, producto_mp, producto_pt):
     """
     Una OP CERRADA no puede anularse directamente.
     Debe lanzar EstadoInvalidoError.
@@ -221,6 +231,7 @@ def test_anular_op_cerrada_bloqueado(receta, producto_mp):
     _dar_stock(producto_mp, cantidad=100, costo_unitario='10.00')
 
     op = _crear_op(receta)
+    _agregar_salida_principal(op, producto_pt, cantidad='80')
     op.cerrar()
     op.refresh_from_db()
     assert op.estado == 'CERRADA'
@@ -234,7 +245,7 @@ def test_anular_op_cerrada_bloqueado(receta, producto_mp):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.django_db
-def test_auditlog_registra_cambio_estado(receta, producto_mp):
+def test_auditlog_registra_cambio_estado(receta, producto_mp, producto_pt):
     """
     Tras cerrar una OP exitosamente debe existir al menos 1 registro
     de AuditLog con entidad='OrdenProduccion' y accion='MODIFICAR'.
@@ -242,6 +253,7 @@ def test_auditlog_registra_cambio_estado(receta, producto_mp):
     _dar_stock(producto_mp, cantidad=100, costo_unitario='10.00')
 
     op = _crear_op(receta)
+    _agregar_salida_principal(op, producto_pt, cantidad='80')
     op.cerrar()
 
     registros = AuditLog.objects.filter(

@@ -9,6 +9,7 @@ revertirán después de cada test gracias a pytest-django (@pytest.mark.django_d
 import pytest
 from decimal import Decimal
 from datetime import date
+from django.contrib.auth.models import User
 
 from apps.almacen.models import UnidadMedida, Categoria, Producto
 from apps.compras.models import Proveedor
@@ -86,6 +87,12 @@ def producto_pt(db, unidad_kg, categoria_lacteos):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.fixture
+def usuario(db):
+    """Usuario estándar para pruebas de auditoría y servicios."""
+    return User.objects.create_user(username='tester_admin', password='password123', is_staff=True)
+
+
+@pytest.fixture
 def proveedor(db):
     """Proveedor básico para facturas de compra."""
     return Proveedor.objects.create(
@@ -114,9 +121,9 @@ def receta(db, producto_mp, producto_pt, unidad_kg):
     Receta que produce producto_pt a partir de producto_mp.
     RecetaDetalle: cantidad_base=10, unidad=kg.
     """
+    # Sprint 2: Se removió producto_terminado del modelo Receta
     r = Receta.objects.create(
         nombre='Receta Queso Estándar',
-        producto_terminado=producto_pt,
         rendimiento_esperado=Decimal('80.00'),
     )
     RecetaDetalle.objects.create(

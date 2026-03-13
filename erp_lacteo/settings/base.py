@@ -16,16 +16,18 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.humanize",
     "apps.core",
     "apps.almacen",
     "apps.compras",
     "apps.ventas",
     "apps.produccion",
     "apps.bancos",
+    "apps.reportes",
 ]
-
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -135,6 +137,9 @@ JAZZMIN_SETTINGS = {
     "site_brand": "LacteOps",
     "welcome_sign": "Bienvenido a LacteOps",
     "theme": "default",
+    "navigation_expanded": False,
+    "collapsible_nav": True,
+    "hide_models": ["reportes.ReporteLink"],
     "icons": {
         "almacen.producto": "fas fa-boxes",
         "almacen.movimientoinventario": "fas fa-exchange-alt",
@@ -153,9 +158,21 @@ JAZZMIN_SETTINGS = {
         "bancos.periodoreexpresado": "fas fa-calendar-check",
         "core.auditlog": "fas fa-history",
     },
+    "custom_links": {
+        "reportes": [
+            {"name": "Ventas", "url": "reportes:ventas", "icon": "fas fa-chart-line"},
+            {"name": "Cuentas por Cobrar", "url": "reportes:cxc", "icon": "fas fa-hand-holding-usd"},
+            {"name": "Compras", "url": "reportes:compras", "icon": "fas fa-shopping-cart"},
+            {"name": "Cuentas por Pagar", "url": "reportes:cxp", "icon": "fas fa-file-invoice-dollar"},
+            {"name": "Producción", "url": "reportes:produccion", "icon": "fas fa-industry"},
+            {"name": "Gastos y Servicios", "url": "reportes:gastos", "icon": "fas fa-receipt"},
+            {"name": "Capital de Trabajo", "url": "reportes:capital_trabajo", "icon": "fas fa-chart-pie"},
+        ]
+    }
 }
-
 DEFAULT_CHARSET = 'utf-8'
 
 # Redirigir login_required al login del Admin
 LOGIN_URL = "/admin/login/"
+
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"

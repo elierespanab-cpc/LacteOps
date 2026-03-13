@@ -38,7 +38,7 @@ class Receta(AuditableModel):
         ordering = ['nombre']
 
     def __str__(self):
-        return f"{self.nombre} - Produce: {self.producto_terminado.nombre}"
+        return self.nombre
 
 
 class RecetaDetalle(AuditableModel):

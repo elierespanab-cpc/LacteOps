@@ -1,0 +1,76 @@
+{% extends 'reportes/base_reporte.html' %}
+{% load humanize %}
+
+{% block report_title %}
+    Reporte de Cuentas por Pagar
+    <br><small>Al corte: {{ fecha_corte|date:"Y-m-d" }} | Tipo: {{ tipo }}</small>
+{% endblock %}
+
+{% block content %}
+<div class="no-print filters">
+    <form method="get">
+        <label>Fecha de Corte: <input type="date" name="fecha_corte" value="{{ fecha_corte|date:'Y-m-d' }}"></label>
+        <label>Tipo:
+            <select name="tipo">
+                <option value="TODOS" {% if tipo == 'TODOS' %}selected{% endif %}>Todos</option>
+                <option value="COMPRAS" {% if tipo == 'COMPRAS' %}selected{% endif %}>Compras</option>
+                <option value="GASTOS_SERVICIOS" {% if tipo == 'GASTOS_SERVICIOS' %}selected{% endif %}>Gastos y Servicios</option>
+            </select>
+        </label>
+        <button type="submit">Generar Reporte</button>
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Proveedor</th>
+            <th>Tipo Doc.</th>
+            <th>No. Documento</th>
+            <th>Vencimiento</th>
+            <th class="text-right">Días Vencida</th>
+            <th class="text-right">Monto USD Original</th>
+            <th class="text-right">Saldo Pendiente USD</th>
+            <th class="text-right">0-30 Días</th>
+            <th class="text-right">31-60 Días</th>
+            <th class="text-right">61-90 Días</th>
+            <th class="text-right">+90 Días</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% regroup resultados by documento.proveedor as prov_group %}
+        {% for grupo in prov_group %}
+            <tr class="group-header">
+                <td colspan="11">{{ grupo.grouper.razon_social }} (RIF: {{ grupo.grouper.rif }})</td>
+            </tr>
+            {% for item in grupo.list %}
+            <tr>
+                <td></td>
+                <td>{% if item.es_gasto %}Gasto/Servicio{% else %}Factura Compra{% endif %}</td>
+                <td>{{ item.documento.numero }}</td>
+                <td>{{ item.documento.fecha_vencimiento|date:"Y-m-d" }}</td>
+                <td class="text-right">{{ item.dias }}</td>
+                <td class="text-right">{% if item.es_gasto %}{{ item.documento.monto_usd|intcomma }}{% else %}{{ item.documento.total_usd|default:item.documento.total|intcomma }}{% endif %}</td>
+                <td class="text-right">{{ item.saldo|intcomma }}</td>
+                <td class="text-right">{{ item.s_0|intcomma }}</td>
+                <td class="text-right">{{ item.s_31|intcomma }}</td>
+                <td class="text-right">{{ item.s_61|intcomma }}</td>
+                <td class="text-right">{{ item.s_90|intcomma }}</td>
+            </tr>
+            {% endfor %}
+        {% empty %}
+        <tr>
+            <td colspan="11" class="text-center">No hay cuentas por pagar a la fecha de corte.</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+            <td colspan="6" class="text-right">Total General Pendiente:</td>
+            <td class="text-right">{{ totales.pendiente|intcomma }}</td>
+            <td class="text-right">{{ totales.s_0_30|intcomma }}</td>
+            <td class="text-right">{{ totales.s_31_60|intcomma }}</td>
+            <td class="text-right">{{ totales.s_61_90|intcomma }}</td>
+            <td class="text-right">{{ totales.s_90_plus|intcomma }}</td>
+        </tr>
+    </tbody>
+</table>
+{% endblock %}

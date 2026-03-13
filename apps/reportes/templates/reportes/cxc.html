@@ -1,0 +1,70 @@
+{% extends 'reportes/base_reporte.html' %}
+{% load humanize %}
+
+{% block report_title %}
+    Reporte de Cuentas por Cobrar
+    <br><small>Al corte: {{ fecha_corte|date:"Y-m-d" }}</small>
+{% endblock %}
+
+{% block content %}
+<div class="no-print filters">
+    <form method="get">
+        <label>Fecha de Corte: <input type="date" name="fecha_corte" value="{{ fecha_corte|date:'Y-m-d' }}"></label>
+        <button type="submit">Generar Reporte</button>
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Cliente</th>
+            <th>No. Factura</th>
+            <th>Emisión</th>
+            <th>Vencimiento</th>
+            <th class="text-right">Días Vencida</th>
+            <th class="text-right">Monto Total</th>
+            <th class="text-right">Saldo Pendiente</th>
+            <th class="text-right">0-30 Días</th>
+            <th class="text-right">31-60 Días</th>
+            <th class="text-right">61-90 Días</th>
+            <th class="text-right">+90 Días</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% regroup resultados by factura.cliente as clientes_group %}
+        {% for grupo in clientes_group %}
+            <tr class="group-header">
+                <td colspan="11">{{ grupo.grouper.razon_social }} (RIF: {{ grupo.grouper.rif }})</td>
+            </tr>
+            {% for item in grupo.list %}
+            <tr>
+                <td></td>
+                <td>{{ item.factura.numero }}</td>
+                <td>{{ item.factura.fecha|date:"Y-m-d" }}</td>
+                <td>{{ item.factura.fecha_vencimiento|date:"Y-m-d" }}</td>
+                <td class="text-right">{{ item.dias_vencida }}</td>
+                <td class="text-right">{{ item.factura.total_usd|default:item.factura.total|intcomma }}</td>
+                <td class="text-right">{{ item.saldo|intcomma }}</td>
+                <td class="text-right">{{ item.s_0_30|intcomma }}</td>
+                <td class="text-right">{{ item.s_31_60|intcomma }}</td>
+                <td class="text-right">{{ item.s_61_90|intcomma }}</td>
+                <td class="text-right">{{ item.s_90_plus|intcomma }}</td>
+            </tr>
+            {% endfor %}
+        {% empty %}
+        <tr>
+            <td colspan="11" class="text-center">No hay cuentas por cobrar a la fecha de corte.</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+            <td colspan="5" class="text-right">Total General:</td>
+            <td class="text-right">{{ totales.total|intcomma }}</td>
+            <td class="text-right">{{ totales.pendiente|intcomma }}</td>
+            <td class="text-right">{{ totales.s_0_30|intcomma }}</td>
+            <td class="text-right">{{ totales.s_31_60|intcomma }}</td>
+            <td class="text-right">{{ totales.s_61_90|intcomma }}</td>
+            <td class="text-right">{{ totales.s_90_plus|intcomma }}</td>
+        </tr>
+    </tbody>
+</table>
+{% endblock %}
