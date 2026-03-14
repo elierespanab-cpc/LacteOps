@@ -325,3 +325,21 @@ class MovimientoTesoreria(models.Model):
     def delete(self, *args, **kwargs):
         raise EstadoInvalidoError(
             'MovimientoTesoreria', 'GUARDADO', 'eliminar (es inmutable)')
+
+
+class RespaldoBD(models.Model):  # NO AuditableModel — log inmutable
+    fecha = models.DateTimeField(auto_now_add=True)
+    ejecutado_por = models.ForeignKey(settings.AUTH_USER_MODEL,
+                       null=True, on_delete=models.SET_NULL)
+    nombre_archivo = models.CharField(max_length=200)
+    tamanio_bytes = models.PositiveIntegerField(default=0)
+    exitoso = models.BooleanField(default=False)
+    error_mensaje = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = 'Respaldo de BD'
+        verbose_name_plural = 'Respaldos de BD'
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f'{self.fecha:%Y-%m-%d %H:%M} — {self.nombre_archivo}'

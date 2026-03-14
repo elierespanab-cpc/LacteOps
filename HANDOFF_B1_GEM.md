@@ -1,4 +1,4 @@
-# HANDOFF Fase B1-GEM — Sprint 3 LacteOps
+# HANDOFF B1-GEM — Sprint 3 LacteOps
 
 **Fecha:** 2026-03-13
 **Agente:** Gemini (Modeling)
@@ -7,43 +7,45 @@
 ---
 
 ## STATUS: OK
-
-### Tareas Completadas
-
-#### 1. Modelado en apps/core
-- **TasaCambio**: Creado para el registro histórico y diario de tasas BCV/Usuario. Campo `fecha` con `unique=True`.
-- **CategoriaGasto**: Creado como modelo jerárquico (padre-hija) con contextos `FACTURA` y `TESORERIA`. Hereda de `AuditableModel`.
-
-#### 2. Módulo de Socios
-- **App**: `apps.socios` creada e instalada.
-- **Socio**: Modelo base transaccional creado, hereda de `AuditableModel`.
-
-#### 3. Refactorización de Gastos (apps/compras)
-- **GastoServicio**: El campo `categoria_gasto` se ha convertido de `CharField` a `ForeignKey` apuntando a `core.CategoriaGasto`.
-- **Limpieza**: Se eliminó `CATEGORIA_CHOICES` del modelo ya que ahora se gestiona vía base de datos.
-
-#### 4. Datos Maestros
-- **Secuencias**: Actualizado `fixtures/secuencias.json` para incluir la serie `SOC-` destinada a préstamos de socios.
+- **manage.py check**: 0 issues ✅
+- **pytest**: 96 tests passed ✅
 
 ---
 
-## Migraciones Generadas
+## Modelos Creados / Modificados
 
-| App | Archivo | Tipo | Descripción |
-|---|---|---|---|
-| **core** | `0005_tasacambio_categoriagasto.py` | Esquema | Creación de modelos de tasas y categorías. |
-| **compras** | `0004_migrate_categories.py` | **Data** (RunPython) | Crea categorías por defecto (`FACTURA`) y migra datos existentes de CharField a IDs. |
-| **compras** | `0005_alter_gastoservicio_categoria_gasto.py` | Esquema | Convierte formalmente el campo a ForeignKey. |
-| **socios** | `0001_initial.py` | Esquema | Creación del modelo Socio. |
+### 1. Apps/Core
+- **Notificacion**: Nuevo modelo para alertas del sistema (CxC, Stock, Tasa BCV, Préstamos).
+  - Campos: `tipo`, `titulo`, `mensaje`, `entidad`, `entidad_id`, `fecha_referencia`, `activa`.
+  - Restricción: `unique_together` para evitar duplicados del mismo evento.
+
+### 2. Apps/Almacen
+- **Producto**: Se agregaron campos de control de inventario y KPI:
+  - `stock_minimo`, `stock_maximo`: Para alertas de reposición.
+  - `es_materia_prima_base`: Flag para identificar leches (vaca/búfala) en el precio ponderado del dashboard.
+- **CambioProducto**: Nuevo modelo para el flujo de aprobación dual de modificaciones en productos.
+  - Campos: `producto`, `campo`, `valor_anterior`, `valor_nuevo`, `propuesto_por`, `aprobado_por`, `estado`, `motivo_rechazo`.
+
+### 3. Apps/Bancos
+- **RespaldoBD**: Nuevo modelo (no auditable) para el log inmutable de copias de seguridad.
+  - Campos: `fecha`, `ejecutado_por`, `nombre_archivo`, `tamanio_bytes`, `exitoso`, `error_mensaje`.
+
+### 4. Apps/Ventas
+- **DetalleLista**: Se modificó el `related_name` del campo `producto` a `'precios_en_tarifas'` para mejorar la legibilidad en consultas inversas.
 
 ---
 
-## Verificación Técnica
+## Migraciones Generadas y Aplicadas
 
-- **manage.py check**: `System check identified no issues (0 silenced).` ✅
+| App | Archivo | Descripción |
+|---|---|---|
+| **core** | `0006_notificacion.py` | Creación del modelo de notificaciones. |
+| **almacen** | `0005_producto_..._cambioproducto.py` | Nuevos campos en Producto y modelo de aprobación dual. |
+| **bancos** | `0004_respaldobd.py` | Histórico de respaldos de base de datos. |
+| **ventas** | `0004_alter_detallelista_producto.py` | Cambio de related_name en DetalleLista. |
 
-## Decisiones de Diseño
+---
 
-1. **Separación de Migraciones**: Se optó por una migración de datos intermedia (`0004_migrate_categories`) que puebla las nuevas categorías y actualiza los strings de `GastoServicio` con los IDs correspondientes antes de realizar el `AlterField`. Esto garantiza que la conversión de tipo de dato en la base de datos sea fluida.
-2. **Contextos de Categoría**: Se implementó la restricción de `unique_together` en `CategoriaGasto` para nombre y contexto, evitando duplicidad lógica pero permitiendo categorías con mismo nombre en contextos distintos (ej: "Honorarios" tanto en Factura como en Tesorería si fuera necesario).
-3. **Hierarchy**: El modelo `CategoriaGasto` incluye el campo `padre` como FK recursiva para soportar el árbol de dos niveles solicitado en los requerimientos.
+## Decisiones Técnicas
+- El modelo `RespaldoBD` no hereda de `AuditableModel` por ser en sí mismo un log inmutable de sistema, evitando recursividad o ruido en el AuditLog.
+- Se ha verificado que las modificaciones no rompen la integridad de los 96 tests existentes.

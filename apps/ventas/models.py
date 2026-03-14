@@ -67,7 +67,7 @@ class ListaPrecio(AuditableModel):
 
 class DetalleLista(AuditableModel):
     lista = models.ForeignKey(ListaPrecio, related_name='detalles', on_delete=models.PROTECT, verbose_name="Lista")
-    producto = models.ForeignKey(Producto, on_delete=models.PROTECT, verbose_name="Producto")
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT, related_name='precios_en_tarifas', verbose_name="Producto")
     precio = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Precio")
     aprobado = models.BooleanField(default=False, verbose_name="Aprobado")
     aprobado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Aprobado por")
