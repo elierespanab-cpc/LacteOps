@@ -81,6 +81,17 @@ class DetalleLista(AuditableModel):
     def __str__(self):
         return f"{self.lista.nombre} - {self.producto.codigo} - {self.precio}"
 
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            try:
+                original = DetalleLista.objects.get(pk=self.pk)
+                if original.precio != self.precio:
+                    self.aprobado = False
+                    self.aprobado_por = None
+            except DetalleLista.DoesNotExist:
+                pass
+        super().save(*args, **kwargs)
+
 
 class FacturaVenta(AuditableModel):
     ESTADO_CHOICES = [

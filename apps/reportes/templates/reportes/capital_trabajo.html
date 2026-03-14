@@ -16,6 +16,11 @@
                 <option value="VENTA" {% if valorar == 'VENTA' %}selected{% endif %}>Precio de Venta</option>
             </select>
         </label>
+        <span style="margin-left: 10px;">
+            <a href="?{{ request.GET.urlencode }}&nivel_detalle=1">Nivel 1</a>
+            |
+            <a href="?{{ request.GET.urlencode }}&nivel_detalle=2">Nivel 2</a>
+        </span>
         <button type="submit">Generar Reporte</button>
     </form>
 </div>
@@ -68,6 +73,33 @@
 
 </div>
 
+
+<div style="margin-top: 20px;">
+    <h3>Gastos por Categoria (USD)</h3>
+    {% if nivel_detalle == 1 %}
+    <table>
+        <thead><tr><th>Categoria</th><th class="text-right">Total</th></tr></thead>
+        <tbody>
+        {% for item in gastos_display %}
+            <tr><td>{{ item.categoria }}</td><td class="text-right">{{ item.total|intcomma }}</td></tr>
+        {% empty %}
+            <tr><td colspan="2" class="text-center">Sin datos</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <table>
+        <thead><tr><th>Numero</th><th>Categoria</th><th class="text-right">Monto USD</th></tr></thead>
+        <tbody>
+        {% for g in gastos_display %}
+            <tr><td>{{ g.numero }}</td><td>{{ g.categoria_gasto }}</td><td class="text-right">{{ g.monto_usd|intcomma }}</td></tr>
+        {% empty %}
+            <tr><td colspan="3" class="text-center">Sin datos</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
 <div style="text-align: center; font-size: 18px; margin-top: 30px; font-weight: bold; padding: 15px; border: 2px solid #555; background-color: #f2f2f2;">
     Capital de Trabajo Neto: {{ capital_trabajo|intcomma }} USD
 </div>

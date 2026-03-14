@@ -283,6 +283,9 @@ class GastoServicio(AuditableModel):
         if self._state.adding and not self.numero:
             from apps.core.services import generar_numero
             self.numero = generar_numero('APC')
+        if self.categoria_gasto and self.categoria_gasto.padre is None:
+            from django.core.exceptions import ValidationError
+            raise ValidationError('Seleccione una subcategoría, no una categoría padre.')
         super().save(*args, **kwargs)
 
     def pagar(self, cuenta_bancaria, monto, moneda, tasa_cambio):

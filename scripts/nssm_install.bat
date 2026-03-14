@@ -1,5 +1,9 @@
-ï»¿@echo off
+@echo off
 setlocal enableextensions
+REM Agregar pg_dump al PATH del sistema
+setx PATH "%PATH%;C:\Program Files\PostgreSQL\15\bin" /M
+echo PATH actualizado — reiniciar PowerShell para efecto inmediato.
+
 
 REM ==================================================
 REM Registrar LacteOps como servicio Windows con NSSM
@@ -30,6 +34,11 @@ REM Crear servicio
 REM Logs opcionales
 "%NSSM_EXE%" set LacteOps AppStdout "%APP_DIR%\logs\service_out.log"
 "%NSSM_EXE%" set LacteOps AppStderr "%APP_DIR%\logs\service_err.log"
+
+REM Task Scheduler: Notificaciones diarias
+schtasks /Create /TN "LacteOps-Notificaciones" ^
+  /TR "C:\Desarollos\LacteOps\venv\Scripts\python.exe manage.py generar_notificaciones" ^
+  /SC DAILY /ST 07:00 /F
 
 echo Servicio LacteOps registrado correctamente.
 endlocal

@@ -108,6 +108,17 @@ class DetalleListaInline(admin.TabularInline):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
+class DetallePorProductoInline(admin.TabularInline):
+    model = DetalleLista
+    fields = ("lista", "precio", "aprobado", "vigente_desde")
+    readonly_fields = ("aprobado",)
+    extra = 0
+    verbose_name = "Precio en Tarifa"
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(ListaPrecio)
 class ListaPrecioAdmin(admin.ModelAdmin):
     list_display = ("nombre", "activa", "requiere_aprobacion")
