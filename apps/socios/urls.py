@@ -1,3 +1,8 @@
 from django.urls import path
+from . import views_print
 
-urlpatterns = []
+app_name = "socios"
+
+urlpatterns = [
+    path("prestamo/<int:pk>/print/", views_print.imprimir_prestamo, name="imprimir_prestamo"),
+]

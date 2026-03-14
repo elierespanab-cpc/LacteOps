@@ -28,6 +28,11 @@
     <div class="no-print" style="margin-bottom: 20px;">
         <button onclick="window.print()" style="padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px;">🖨️ Imprimir Reporte</button>
         <button onclick="history.back()" style="padding: 8px 15px; cursor: pointer; background: #6c757d; color: white; border: none; border-radius: 4px; margin-left: 10px;">Volver</button>
+        {% if request.GET %}
+            <a href="?{{ request.GET.urlencode }}&exportar=1" style="padding: 8px 15px; background: #28a745; color: white; border-radius: 4px; text-decoration: none; margin-left: 10px;">Exportar Excel</a>
+        {% else %}
+            <a href="?exportar=1" style="padding: 8px 15px; background: #28a745; color: white; border-radius: 4px; text-decoration: none; margin-left: 10px;">Exportar Excel</a>
+        {% endif %}
     </div>
 
     <div class="header">
