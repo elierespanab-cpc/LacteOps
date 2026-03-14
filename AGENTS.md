@@ -3,10 +3,10 @@
 ## ⚠️ RAMA DE TRABAJO OBLIGATORIA
 
 ```
-git checkout sprint3
+git checkout sprint4
 ```
 
-**Todos los agentes (Claude Code, Codex, Gemini) DEBEN trabajar en la rama `sprint3`.**
+**Todos los agentes (Claude Code, Codex, Gemini) DEBEN trabajar en la rama `sprint4`.**
 No escribir código en `main`. No crear ramas propias salvo indicación explícita del desarrollador.
 
 ---
@@ -23,7 +23,8 @@ No escribir código en `main`. No crear ramas propias salvo indicación explíci
 |--------|--------|-------|
 | Sprint 0 + 1 | ✅ COMPLETO | 60 tests |
 | Sprint 2 | ✅ COMPLETO | 75 tests en verde |
-| Sprint 3 | 🔄 EN CURSO | meta: ~105 tests |
+| Sprint 3 | ✅ COMPLETO | 96 tests en verde |
+| Sprint 4 | 🔄 EN CURSO | meta: ~120 tests |
 
 ## Convenciones críticas (no negociables)
 
