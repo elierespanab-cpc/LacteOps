@@ -192,3 +192,24 @@ class CategoriaGasto(AuditableModel):
 
     def __str__(self):
         return self.nombre
+
+
+class Notificacion(models.Model):
+    TIPOS = [('CXC_VENCIENDO', 'CxC Venciendo'), ('STOCK_MINIMO', 'Stock Mínimo'),
+             ('TASA_NO_CARGADA', 'Tasa BCV No Cargada'), ('PRESTAMO_VENCIENDO', 'Préstamo Venciendo')]
+    tipo = models.CharField(max_length=30, choices=TIPOS)
+    titulo = models.CharField(max_length=200)
+    mensaje = models.TextField()
+    entidad = models.CharField(max_length=100)
+    entidad_id = models.PositiveIntegerField()
+    fecha_referencia = models.DateField()
+    activa = models.BooleanField(default=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['tipo', 'entidad', 'entidad_id']
+        verbose_name = 'Notificación'
+        verbose_name_plural = 'Notificaciones'
+
+    def __str__(self):
+        return f'{self.tipo} — {self.titulo}'

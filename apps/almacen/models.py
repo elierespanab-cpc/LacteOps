@@ -11,6 +11,7 @@ import logging
 from decimal import Decimal
 
 from django.db import models
+from django.conf import settings
 
 from apps.core.models import AuditableModel
 from apps.core.exceptions import EstadoInvalidoError
@@ -56,6 +57,13 @@ class Producto(AuditableModel):
     peso_unitario_kg = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True, verbose_name="Peso Unitario (kg)")
     es_materia_prima = models.BooleanField(default=False, verbose_name="Es Materia Prima")
     es_producto_terminado = models.BooleanField(default=False, verbose_name="Es Producto Terminado")
+    stock_minimo = models.DecimalField(max_digits=18, decimal_places=4,
+      null=True, blank=True, verbose_name='Stock Mínimo')
+    stock_maximo = models.DecimalField(max_digits=18, decimal_places=4,
+      null=True, blank=True, verbose_name='Stock Máximo')
+    es_materia_prima_base = models.BooleanField(default=False,
+      verbose_name='Materia Prima Base (leche)',
+      help_text='Marcar para leche vaca y búfala. Precio ponderado del dashboard.')
     activo = models.BooleanField(default=True, verbose_name="Activo")
 
     class Meta:
@@ -65,6 +73,29 @@ class Producto(AuditableModel):
 
     def __str__(self):
         return f"[{self.codigo}] {self.nombre}"
+
+
+class CambioProducto(AuditableModel):
+    ESTADOS = [('PENDIENTE', 'Pendiente'), ('APROBADO', 'Aprobado'), ('RECHAZADO', 'Rechazado')]
+    producto = models.ForeignKey('Producto', on_delete=models.PROTECT,
+                   related_name='cambios_pendientes')
+    campo = models.CharField(max_length=100)
+    valor_anterior = models.TextField()
+    valor_nuevo = models.TextField()
+    propuesto_por = models.ForeignKey(settings.AUTH_USER_MODEL,
+                       on_delete=models.PROTECT, related_name='cambios_propuestos')
+    aprobado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                      on_delete=models.SET_NULL, related_name='cambios_aprobados')
+    estado = models.CharField(max_length=10, choices=ESTADOS, default='PENDIENTE')
+    fecha_propuesta = models.DateTimeField(auto_now_add=True)
+    motivo_rechazo = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = 'Cambio de Producto'
+        verbose_name_plural = 'Cambios de Producto'
+
+    def __str__(self):
+        return f'{self.producto} — {self.campo} ({self.estado})'
 
 
 class MovimientoInventario(models.Model):

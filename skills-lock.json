@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "48918a76e3f070c0cbd13a70324bf1c4d2cc8251f33a27055a4e432312a3ac0c"
     },
+    "prompt-improver": {
+      "source": "dotneet/claude-code-marketplace",
+      "sourceType": "github",
+      "computedHash": "04839178a8c8005e0e92b4cb6cd5fe59e6eccdb49a8e23597b16d98467359385"
+    },
     "python-performance-optimization": {
       "source": "wshobson/agents",
       "sourceType": "github",
