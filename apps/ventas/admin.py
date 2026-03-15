@@ -5,6 +5,7 @@ from decimal import Decimal
 from django.contrib import admin, messages
 
 from apps.ventas.models import Cliente, FacturaVenta, DetalleFacturaVenta, Cobro
+from apps.almacen.models import Producto
 from apps.core.exceptions import LacteOpsError
 
 logger = logging.getLogger(__name__)

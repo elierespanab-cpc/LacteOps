@@ -1,4 +1,4 @@
-import datetime
+﻿import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
@@ -54,6 +54,20 @@ def reporte_ventas(request):
 
     detalles = list(qs.order_by('factura__fecha', 'factura__numero'))
 
+    parametros = {}
+    if fecha_desde:
+        parametros['Desde'] = fecha_desde
+    if fecha_hasta:
+        parametros['Hasta'] = fecha_hasta
+    if clientes_ids:
+        parametros['Clientes'] = ', '.join(clientes_ids)
+    if productos_ids:
+        parametros['Productos'] = ', '.join(productos_ids)
+    if estados:
+        parametros['Estados'] = ', '.join(estados)
+    if agrupar_por_cliente:
+        parametros['Agrupar por cliente'] = 'Sí'
+
     if 'exportar' in request.GET:
         columnas = [
             "Numero",
@@ -93,6 +107,8 @@ def reporte_ventas(request):
             "reporte_compras",
             columnas,
             [[str(v) for v in fila] for fila in filas],
+            empresa=empresa,
+            parametros=parametros,
         )
 
     if 'exportar' in request.GET:
@@ -134,6 +150,8 @@ def reporte_ventas(request):
             "reporte_ventas",
             columnas,
             [[str(v) for v in fila] for fila in filas],
+            empresa=empresa,
+            parametros=parametros,
         )
 
     context = {
@@ -146,7 +164,6 @@ def reporte_ventas(request):
         'productos': Producto.objects.filter(activo=True),
     }
     return render(request, 'reportes/ventas.html', context)
-
 
 @login_required
 def reporte_cxc(request):
@@ -196,6 +213,9 @@ def reporte_cxc(request):
             totales['s_61_90'] += saldo_61_90
             totales['s_90_plus'] += saldo_90_plus
 
+    parametros = {}
+    parametros['Fecha corte'] = fecha_corte or str(hasta)
+
     if 'exportar' in request.GET:
         columnas = [
             "Cliente",
@@ -230,6 +250,8 @@ def reporte_cxc(request):
             "reporte_cxc",
             columnas,
             [[str(v) for v in fila] for fila in filas],
+            empresa=empresa,
+            parametros=parametros,
         )
 
     context = {
@@ -368,6 +390,11 @@ def reporte_cxp(request):
             totales['s_61_90'] += s_61
             totales['s_90_plus'] += s_90
 
+    parametros = {
+        'Fecha corte': fecha_corte or str(hasta),
+        'Tipo': tipo_reporte,
+    }
+
     if 'exportar' in request.GET:
         columnas = [
             "Proveedor",
@@ -407,6 +434,8 @@ def reporte_cxp(request):
             "reporte_cxp",
             columnas,
             [[str(v) for v in fila] for fila in filas],
+            empresa=empresa,
+            parametros=parametros,
         )
 
     context = {
@@ -417,7 +446,6 @@ def reporte_cxp(request):
         'totales': totales,
     }
     return render(request, 'reportes/cxp.html', context)
-
 
 @login_required
 def reporte_produccion(request):
@@ -449,6 +477,12 @@ def reporte_produccion(request):
                 s.cu = s.costo_asignado / s.cantidad
             else:
                 s.cu = Decimal('0.00')
+
+    parametros = {}
+    if fecha_desde:
+        parametros['Desde'] = fecha_desde
+    if fecha_hasta:
+        parametros['Hasta'] = fecha_hasta
 
     if 'exportar' in request.GET:
         columnas = [
@@ -496,6 +530,8 @@ def reporte_produccion(request):
             "reporte_produccion",
             columnas,
             [[str(v) for v in fila] for fila in filas],
+            empresa=empresa,
+            parametros=parametros,
         )
 
     context = {
@@ -549,6 +585,17 @@ def reporte_gastos(request):
 
     all_categorias = set(g.categoria_gasto for g in Gs.objects.all())
 
+    parametros = {}
+    if fecha_desde:
+        parametros['Desde'] = fecha_desde
+    if fecha_hasta:
+        parametros['Hasta'] = fecha_hasta
+    if estado:
+        parametros['Estado'] = estado
+    if categorias:
+        parametros['Categorías'] = ', '.join(categorias)
+    parametros['Nivel detalle'] = str(nivel_detalle)
+
     if 'exportar' in request.GET:
         if nivel_detalle == 1:
             columnas = ["Categoria", "Total USD"]
@@ -580,6 +627,8 @@ def reporte_gastos(request):
             "reporte_gastos",
             columnas,
             [[str(v) for v in fila] for fila in filas],
+            empresa=empresa,
+            parametros=parametros,
         )
 
     context = {
@@ -724,6 +773,12 @@ def reporte_capital_trabajo(request):
             {'categoria': k, 'total': v} for k, v in agrupado.items()
         ]
 
+    parametros = {
+        'Fecha corte': fecha_corte or str(hasta),
+        'Valorar inventario': valorar,
+        'Nivel detalle': str(nivel_detalle),
+    }
+
     if 'exportar' in request.GET:
         columnas = [
             "Concepto",
@@ -745,6 +800,8 @@ def reporte_capital_trabajo(request):
             "capital_trabajo",
             columnas,
             [[str(v) for v in fila] for fila in filas],
+            empresa=empresa,
+            parametros=parametros,
         )
 
     context = {
@@ -767,6 +824,71 @@ def reporte_capital_trabajo(request):
         'nivel_detalle': nivel_detalle,
     }
     return render(request, 'reportes/capital_trabajo.html', context)
+
+@login_required
+def reporte_stock(request):
+    from apps.core.models import ConfiguracionEmpresa
+    from apps.core.rbac import usuario_en_grupo
+
+    if not (request.user.is_superuser or usuario_en_grupo(request.user, 'Master', 'Administrador')):
+        raise PermissionDenied
+
+    empresa = ConfiguracionEmpresa.objects.first()
+    solo_activos = request.GET.get('activos', '1') == '1'
+    qs = Producto.objects.select_related('unidad_medida')
+    if solo_activos:
+        qs = qs.filter(activo=True)
+    qs = qs.order_by('codigo')
+
+    productos = []
+    total_costo = Decimal('0')
+    total_venta = Decimal('0')
+    for p in qs:
+        valor_costo = (p.stock_actual * p.costo_promedio).quantize(Decimal('0.01'))
+        precio_v = p.precio_venta if p.precio_venta else p.costo_promedio
+        valor_venta = (p.stock_actual * precio_v).quantize(Decimal('0.01'))
+        total_costo += valor_costo
+        total_venta += valor_venta
+        productos.append({
+            'codigo': p.codigo,
+            'nombre': p.nombre,
+            'stock_actual': p.stock_actual,
+            'unidad': p.unidad_medida.simbolo if p.unidad_medida else '',
+            'costo_promedio': p.costo_promedio,
+            'precio_venta': p.precio_venta,
+            'valor_costo': valor_costo,
+            'valor_venta': valor_venta,
+        })
+
+    if 'exportar' in request.GET:
+        columnas = [
+            'Código', 'Producto', 'Stock', 'U/M',
+            'Costo Unit.', 'Precio Unit.', 'Valor Costo',
+            'Valor Venta'
+        ]
+        filas = [[
+            p['codigo'], p['nombre'], p['stock_actual'],
+            p['unidad'], p['costo_promedio'], p['precio_venta'] or '',
+            p['valor_costo'], p['valor_venta']
+        ] for p in productos]
+        parametros = {'Productos': 'Solo activos' if solo_activos else 'Todos'}
+        return exportar_excel(
+            'Stock',
+            columnas,
+            filas,
+            empresa=empresa,
+            parametros=parametros,
+        )
+
+    context = {
+        'empresa': empresa,
+        'productos': productos,
+        'total_costo': total_costo,
+        'total_venta': total_venta,
+        'solo_activos': solo_activos,
+        'titulo': 'Reporte de Stock',
+    }
+    return render(request, 'reportes/stock.html', context)
 
 
 @login_required
@@ -797,6 +919,8 @@ def dashboard(request):
     leidas = request.session.get('notif_leidas', [])
     ctx.update({'notificaciones': notifs, 'notif_leidas': leidas, 'es_admin': es_admin})
 
+    parametros = {'Tipo': 'Admin' if es_admin else 'Usuario'}
+
     if 'exportar' in request.GET:
         if es_admin:
             columnas = ["Cliente", "Score", "Puntualidad", "Solvencia", "Tendencia"]
@@ -824,6 +948,8 @@ def dashboard(request):
             "dashboard",
             columnas,
             [[str(v) for v in fila] for fila in filas],
+            empresa=ctx.get('empresa'),
+            parametros=parametros,
         )
 
     return render(request, 'reportes/dashboard.html', ctx)

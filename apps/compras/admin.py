@@ -4,6 +4,7 @@ import logging
 from django.contrib import admin, messages
 
 from apps.compras.models import Proveedor, FacturaCompra, DetalleFacturaCompra, Pago, GastoServicio
+from apps.almacen.models import Producto
 from apps.core.exceptions import LacteOpsError
 
 logger = logging.getLogger(__name__)
