@@ -88,6 +88,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # REGLA: modificaciones en modelos que heredan de AuditableModel deben hacerse via instancia.save(),
 # nunca via QuerySet.update().
 
+FIXTURE_DIRS = [
+    BASE_DIR / "fixtures",
+]
+
 LOG_DIR = BASE_DIR / "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
