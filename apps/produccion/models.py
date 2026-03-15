@@ -162,6 +162,17 @@ class OrdenProduccion(AuditableModel):
         if self.estado != 'ABIERTA':
             raise EstadoInvalidoError('Orden de Producción', self.estado, 'cerrar')
 
+        from apps.almacen.models import MovimientoInventario
+        movs_existentes = MovimientoInventario.objects.filter(
+            referencia=self.numero
+        ).exists()
+        if movs_existentes:
+            raise EstadoInvalidoError(
+                'Orden de Producción',
+                self.estado,
+                'ya tiene movimientos registrados — posible doble cierre'
+            )
+
         salidas = list(self.salidas.select_related('producto').all())
         if not any(s.es_subproducto == False for s in salidas):
             raise EstadoInvalidoError(

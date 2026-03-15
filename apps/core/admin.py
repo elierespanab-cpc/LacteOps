@@ -1,4 +1,4 @@
-import os
+﻿import os
 import subprocess
 import tempfile
 from io import StringIO
@@ -8,6 +8,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.http import HttpResponse
 from django.shortcuts import redirect
+from django.urls import reverse
 from django.db.models import functions
 
 from apps.core.models import AuditLog, ConfiguracionEmpresa, TasaCambio, CategoriaGasto
@@ -57,9 +58,9 @@ class TasaCambioAdmin(admin.ModelAdmin):
         call_command("importar_historico_bcv", stdout=out, stderr=err)
         if err.getvalue():
             self.message_user(request, err.getvalue(), level=messages.WARNING)
-        self.message_user(request, out.getvalue() or "Importación completada.")
+        self.message_user(request, out.getvalue() or "ImportaciÃ³n completada.")
 
-    importar_historico.short_description = "Importar histórico completo BCV"
+    importar_historico.short_description = "Importar histÃ³rico completo BCV"
 
 
 @admin.register(CategoriaGasto)
@@ -69,9 +70,9 @@ class CategoriaGastoAdmin(admin.ModelAdmin):
     search_fields = ("nombre",)
 
     def nombre_indentado(self, obj):
-        return ("— " if obj.padre else "") + obj.nombre
+        return ("â€” " if obj.padre else "") + obj.nombre
 
-    nombre_indentado.short_description = "Categoría"
+    nombre_indentado.short_description = "CategorÃ­a"
 
     def get_queryset(self, request):
         return super().get_queryset(request).order_by(
@@ -123,7 +124,7 @@ def vista_respaldo_bd(request):
             response["Content-Disposition"] = f'attachment; filename="{filename}"'
             return response
         messages.error(request, f"Error pg_dump: {result.stderr[:300]}")
-        return redirect("/admin/")
+        return redirect(reverse("admin:index"))
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
@@ -142,3 +143,5 @@ class RespaldoBDAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+

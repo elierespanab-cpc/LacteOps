@@ -55,7 +55,7 @@ class OrdenProduccionAdmin(admin.ModelAdmin):
     readonly_fields = ("fecha_apertura", "fecha_cierre", "costo_total", "estado")
     search_fields = ("numero", "receta__nombre")
     list_filter = ("estado", "fecha_apertura")
-    actions = ["cerrar_ordenes", "anular_ordenes"]
+    actions = ["cerrar_ordenes", "anular_ordenes", "reabrir_ordenes"]
     
     def get_inline_instances(self, request, obj=None):
         if obj is None:
@@ -95,6 +95,34 @@ class OrdenProduccionAdmin(admin.ModelAdmin):
                 messages.error(request, f'Error inesperado en {obj}. Ver logs.')
 
     anular_ordenes.short_description = 'Anular órdenes seleccionadas'
+
+    @admin.action(description='Reabrir órdenes cerradas (Master/Admin)')
+    def reabrir_ordenes(self, request, queryset):
+        from apps.core.rbac import usuario_en_grupo
+        if not (request.user.is_superuser or
+                usuario_en_grupo(request.user, 'Master', 'Administrador')):
+            self.message_user(
+                request,
+                'Sin permiso. Solo Master o Administrador pueden reabrir.',
+                level=messages.ERROR
+            )
+            return
+        exito = 0
+        for obj in queryset:
+            try:
+                obj.reabrir(request.user, 'Reapertura desde Admin')
+                exito += 1
+            except Exception as e:
+                self.message_user(
+                    request,
+                    f'Error en {obj.numero}: {e}',
+                    level=messages.ERROR
+                )
+        if exito:
+            self.message_user(
+                request,
+                f'{exito} orden(es) reabierta(s) exitosamente.'
+            )
 
 
 

@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 import os
 
 from decouple import config, Csv
@@ -143,6 +143,8 @@ JAZZMIN_SETTINGS = {
     "welcome_sign": "Bienvenido a LacteOps",
     "theme": "default",
     "navigation_expanded": False,
+    "show_ui_builder": False,
+    "custom_index": "reportes:dashboard",
     "collapsible_nav": True,
     "order_with_respect_to": [
         "ventas",
@@ -186,12 +188,13 @@ JAZZMIN_SETTINGS = {
             {"name": "Cuentas por Cobrar", "url": "reportes:cxc", "icon": "fas fa-hand-holding-usd"},
             {"name": "Compras", "url": "reportes:compras", "icon": "fas fa-shopping-cart"},
             {"name": "Cuentas por Pagar", "url": "reportes:cxp", "icon": "fas fa-file-invoice-dollar"},
-            {"name": "Producción", "url": "reportes:produccion", "icon": "fas fa-industry"},
+            {"name": "ProducciÃ³n", "url": "reportes:produccion", "icon": "fas fa-industry"},
             {"name": "Gastos y Servicios", "url": "reportes:gastos", "icon": "fas fa-receipt"},
             {"name": "Capital de Trabajo", "url": "reportes:capital_trabajo", "icon": "fas fa-chart-pie"},
+            {"name": "Stock", "url": "reportes:stock", "icon": "fas fa-boxes"},
         ],
         "core": [
-            {"name": "Respaldo BD", "url": "/admin/respaldo-bd/", "icon": "fas fa-database"},
+            {"name": "Respaldo BD", "url": "/respaldo-bd/", "icon": "fas fa-database"},
         ],
     }
 }
@@ -201,3 +204,5 @@ DEFAULT_CHARSET = 'utf-8'
 LOGIN_URL = "/admin/login/"
 
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+
