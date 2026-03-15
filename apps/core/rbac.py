@@ -49,3 +49,14 @@ def require_group(*grupos):
             return func(request, *args, **kwargs)
         return wrapper
     return decorator
+
+def usuario_en_grupo(usuario, *grupos):
+    """
+    Versión funcional (no decorador) de require_group.
+    Retorna True si el usuario pertenece a alguno de los grupos,
+    o si es superusuario. Retorna False en caso contrario.
+    No lanza excepciones.
+    """
+    if hasattr(usuario, 'is_superuser') and usuario.is_superuser:
+        return True
+    return usuario.groups.filter(name__in=grupos).exists()

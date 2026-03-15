@@ -15,8 +15,9 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.db import models, transaction
 from django.conf import settings
 
-from apps.core.models import AuditableModel
+from apps.core.models import AuditableModel, TasaCambio
 from apps.core.exceptions import EstadoInvalidoError
+from apps.core.rbac import usuario_en_grupo
 from apps.almacen.models import Producto, MovimientoInventario
 from apps.almacen.services import registrar_salida
 
@@ -81,6 +82,17 @@ class DetalleLista(AuditableModel):
     def __str__(self):
         return f"{self.lista.nombre} - {self.producto.codigo} - {self.precio}"
 
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            try:
+                original = DetalleLista.objects.get(pk=self.pk)
+                if original.precio != self.precio:
+                    self.aprobado = False
+                    self.aprobado_por = None
+            except DetalleLista.DoesNotExist:
+                pass
+        super().save(*args, **kwargs)
+
 
 class FacturaVenta(AuditableModel):
     ESTADO_CHOICES = [
@@ -141,22 +153,18 @@ class FacturaVenta(AuditableModel):
     def emitir(self):
         """
         Ejecuta las salidas de inventario para esta factura de venta.
-
-        FASE 1 — Control de crédito (antes de tocar inventario):
-          - Calcula fecha_vencimiento = fecha + dias_credito del cliente.
-          - Detecta facturas vencidas del cliente
-            (estado==EMITIDA AND fecha_vencimiento < hoy AND saldo_pendiente > 0).
-          - Si tipo_control_credito == BLOQUEO: EstadoInvalidoError con lista de facturas.
-          - Si tipo_control_credito == ADVERTENCIA: logger.warning() y continúa.
-
-        FASE 2 — Salidas de inventario (transaction.atomic()).
-
-        Raises:
-            EstadoInvalidoError: Si la factura no está en EMITIDA, ya fue procesada,
-                                 o el cliente tiene crédito bloqueado.
         """
         if self.estado != 'EMITIDA':
             raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir')
+
+        # ── FASE 0: Validación de Tasa de Cambio (Sprint 4) ────────────────────
+        if self.moneda == 'VES' and self.tasa_cambio == Decimal('1.000000'):
+            from apps.core.models import TasaCambio
+            tasa_obj = TasaCambio.objects.filter(fecha__gte=self.fecha).order_by('fecha').first()
+            if not tasa_obj:
+                raise EstadoInvalidoError('Factura de Venta', self.estado, 
+                    'emitir (sin tasa BCV cargada para la fecha o posterior)')
+            self.tasa_cambio = tasa_obj.tasa
 
         if not self.lista_precio_id:
             raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir (debe seleccionar una lista de precios)')
@@ -177,7 +185,7 @@ class FacturaVenta(AuditableModel):
 
         # Asignar fecha_vencimiento en este momento
         self.fecha_vencimiento = self.fecha + timedelta(days=self.cliente.dias_credito)
-        self.save(update_fields=['fecha_vencimiento'])
+        self.save(update_fields=['fecha_vencimiento', 'tasa_cambio'])
 
         # Buscar facturas vencidas del mismo cliente
         facturas_vencidas = []

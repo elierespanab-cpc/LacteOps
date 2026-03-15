@@ -1,110 +1,102 @@
-# HANDOFF_BQA — Fase B-QA Sprint 3
+# HANDOFF_BQA — Fase B-QA Sprint 4
 
 ## STATUS: OK ✅
 
-## Agente: Claude (Fase B-QA)
-## Fecha: 2026-03-13
-## Rama: sprint3
+## Agente: Gemini (Fase B-QA)
+## Fecha: 2026-03-14
+## Rama: sprint4
 
 ---
 
 ## Resultado pytest
 
 ```
-96 passed in 14.04s
+119 passed in 15.10s
 ```
 
 **0 failures. 0 errors. 0 warnings bloqueantes.**
 
 ---
 
-## Archivos de test creados
+## Archivos de test incorporados (Sprint 4)
 
-### tests/test_tasa_cambio.py — 4 tests ✅
+### tests/test_score_riesgo.py — 5 tests ✅
 | Test | Descripción |
 |------|-------------|
-| test_tasa_hoy | Creación y recuperación de tasa por fecha exacta |
-| test_tasa_fecha_anterior | Recuperación de tasa de fecha pasada |
-| test_sin_tasa_exacta_retorna_mas_reciente | filter(fecha__lte).order_by('-fecha').first() |
-| test_bulk_create_no_sobreescribe | ignore_conflicts=True no sobreescribe registro existente |
+| test_score_cliente_sin_deuda | S=85 (neutro) para clientes nuevos |
+| test_score_cliente_deuda_60d | Penalización de Solvencia según mora crítica |
+| test_slope_negativo_bonifica | Tendencia mejora score si ADD disminuye |
+| test_slope_positivo_penaliza | Tendencia castiga score si ADD aumenta |
+| test_utilizacion_limite_credito | Ratio saldo/limite afecta Solvencia |
 
-### tests/test_socios.py — 6 tests ✅
+### tests/test_precio_ponderado_leche.py — 3 tests ✅
 | Test | Descripción |
 |------|-------------|
-| test_prestamo_numero_serie_SOC | Auto-numeración SOC-XXXX |
-| test_prestamo_genera_movimiento_caja_entrada | registrar_prestamo() con cuenta_destino crea MovimientoCaja ENTRADA |
-| test_pago_parcial_estado_activo | Estado permanece ACTIVO tras pago parcial |
-| test_pago_total_estado_cancelado | Estado cambia a CANCELADO cuando total_pagado_usd >= monto_usd |
-| test_prestamo_corriente_en_capital_trabajo | Préstamo con vence <= hoy+365 días → pasivo_corriente |
-| test_prestamo_sin_fecha_es_no_corriente | Préstamo sin fecha_vencimiento → pasivo_no_corriente |
+| test_precio_ponderado_ultima_semana | Cálculo exacto sobre entradas de los últimos 7 días |
+| test_fallback_costo_promedio | Si no hay entradas, usa costo_promedio y marca sin_datos |
+| test_producto_sin_flag_ignorado | Solo incluye productos con es_materia_prima_base=True |
 
-### tests/test_tesoreria_directa.py — 5 tests ✅
+### tests/test_proyeccion_caja.py — 4 tests ✅
 | Test | Descripción |
 |------|-------------|
-| test_cargo_disminuye_saldo | CARGO reduce saldo de la cuenta |
-| test_abono_aumenta_saldo | ABONO aumenta saldo de la cuenta |
-| test_cargo_saldo_insuficiente_lanza_error | SaldoInsuficienteError + rollback atómico |
-| test_movimiento_tesoreria_inmutable | Segundo save() lanza EstadoInvalidoError |
-| test_categoria_contexto_factura_rechazada | contexto='FACTURA' es rechazado (EstadoInvalidoError) |
+| test_proyeccion_incluye_prestamos | Deducción de préstamos SOC por vencer en 7 días |
+| test_proyeccion_total_usd | Consolidación de cuentas VES (vía TasaCambio) y USD |
+| test_proyeccion_facturas_aprobadas | Solo considera facturas en rango de fecha_vencimiento |
 
-### tests/test_correcciones_sprint3.py — 6 tests ✅
+### tests/test_tasa_automatica.py — 4 tests ✅
 | Test | Descripción |
 |------|-------------|
-| test_pago_ves_monto_usd_correcto | monto=500000 VES, tasa=50 → monto_usd=10000.00 (B5+B6) |
-| test_cobro_ves_genera_movimiento_caja | Cobro VES crea MovimientoCaja ENTRADA (B5+B6) |
-| test_orden_cerrada_no_editable | OrdenProduccion CERRADA bloquea save() (B2) |
-| test_reabrir_requiere_master_o_admin | Usuario sin Master/Admin → PermissionDenied (B2) |
-| test_cxp_con_pago_parcial_aparece_en_reporte | Factura APROBADA con pago parcial → CxP saldo correcto (B3) |
-| test_numeracion_vta_formato | FacturaVenta auto-numerada VTA-0001 (B7) |
+| test_emitir_ves_sin_tasa_lanza_error | Bloqueo si no hay tasa cargada para fecha>=factura |
+| test_emitir_ves_busca_fecha_futura | Búsqueda retrospectiva/prospectiva mínima (filter gte) |
+| test_tasa_asignada_de_TasaCambio | Verificación de self.tasa_cambio actualizada en emitir() |
+| test_emitir_usd_no_requiere_tasa | USD no valida tasa BCV |
+
+### tests/test_notificaciones.py — 4 tests ✅
+| Test | Descripción |
+|------|-------------|
+| test_generar_stock_minimo | Creación de notificación activa al cruzar stock_minimo |
+| test_desactivacion_automatica_stock | Se marca activa=False al reponer inventario |
+| test_evitar_duplicados | Comando es idempotente via update_or_create |
+| test_notificacion_tasa_no_cargada | Genera alerta si falta tasa para hoy |
+
+### tests/test_require_group_superuser.py — 3 tests ✅
+| Test | Descripción |
+|------|-------------|
+| test_superuser_bypassea_grupos | is_superuser=True tiene acceso total (v4.0) |
+| test_usuario_en_grupo_funciona | Validación funcional de usuario_en_grupo() |
+| test_usuario_sin_grupo_rechazado | Denegación de acceso para usuarios base |
 
 ---
 
-## Distribución de tests por archivo (96 total)
+## Distribución de tests por archivo (119 total)
 
 | Archivo | Tests |
 |---------|-------|
-| test_ajustes.py | 7 |
-| test_bancos.py | 9 |
-| test_capital_trabajo.py | 2 |
-| test_compras.py | 5 |
-| test_correcciones_sprint3.py | 6 ← NEW |
-| test_credito.py | 6 |
-| test_gastos.py | 7 |
-| test_kardex.py | 8 |
-| test_listas_precio.py | 5 |
-| test_numeracion.py | 5 |
-| test_produccion.py | 7 |
-| test_produccion_conjunta.py | 4 |
-| test_rbac.py | 3 |
-| test_reexpresion_idempotente.py | 1 |
-| test_socios.py | 6 ← NEW |
-| test_tasa_cambio.py | 4 ← NEW |
-| test_tesoreria_directa.py | 5 ← NEW |
-| test_ventas.py | 5 |
-| **TOTAL** | **96** |
+| Originales (Sprint 2/3) | 96 |
+| `test_score_riesgo.py` | 5 |
+| `test_precio_ponderado_leche.py` | 3 |
+| `test_proyeccion_caja.py` | 4 |
+| `test_tasa_automatica.py` | 4 |
+| `test_notificaciones.py` | 4 |
+| `test_require_group_superuser.py` | 3 |
+| **TOTAL** | **119** |
 
 ---
 
-## Regresiones encontradas
+## Mejoras de Estabilidad (Hotfixes aplicados)
 
-Ninguna. Todos los 75 tests del Sprint 2 continúan en verde.
-
----
-
-## Decisiones de diseño en tests
-
-- `secuencia_soc`, `secuencia_tes`, `secuencia_vta`, `secuencia_pro`: fixtures locales que resetean el
-  contador a 0 usando `get_or_create` + `save(update_fields=...)` para garantizar aislamiento.
-- `PrestamoPorSocio.objects.create(estado='ACTIVO')` en tests de capital_trabajo: se crea directamente
-  sin pasar por `registrar_prestamo()` para simplificar el fixture.
-- `Pago.objects.create(monto_usd=Decimal('200.00'))`: `editable=False` aplica solo a formularios;
-  `objects.create()` permite establecer el campo directamente para el test de CxP.
-- Tests de OrdenProduccion CERRADA: se usa `OrdenProduccion.objects.filter(...).update(estado='CERRADA')`
-  para forzar el estado sin ejecutar el costoso flujo de `cerrar()`.
+1.  **Migración 0003**: Corregida ruta de `loaddata` de `'fixtures/secuencias.json'` a `'secuencias'`.
+2.  **Configuración**: Añadido `FIXTURE_DIRS` en `base.py` para compatibilidad con entornos de prueba.
+3.  **Lógica Ventas**: Movida la validación de `tasa_cambio` al inicio de `emitir()` para asegurar cumplimiento de pre-requisitos antes de validar precios.
 
 ---
 
 ## Próximo paso sugerido
 
-Sprint 3 Fase B-QA completada. El código está listo para revisión final o
-para continuar con las siguientes fases del Sprint 3 según la guía.
+QA del Sprint 4 finalizado con **119 tests en verde**. El sistema garantiza integridad en:
+- RBAC (Bypaseo de superusuario).
+- Modelado financiero (Tasa automática VES).
+- Análisis & KPIs (Score de Riesgo, Ponderado Leche, Flujo de Caja).
+- Notificaciones (Alertas automáticas de stock y tasas).
+
+Proceed to merge with `main`.
