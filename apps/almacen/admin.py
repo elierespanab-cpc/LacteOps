@@ -1,5 +1,17 @@
+import json
+
 from django.contrib import admin
-from apps.almacen.models import Categoria, UnidadMedida, Producto, MovimientoInventario
+from apps.almacen.models import (
+    Categoria,
+    UnidadMedida,
+    Producto,
+    MovimientoInventario,
+    CambioProducto,
+)
+from apps.core.rbac import usuario_en_grupo
+from apps.ventas.admin import DetallePorProductoInline
+
+
 
 
 @admin.register(UnidadMedida)
@@ -30,6 +42,7 @@ class ProductoAdmin(admin.ModelAdmin):
     readonly_fields = ("stock_actual", "costo_promedio")
     search_fields = ("codigo", "nombre")
     list_filter = ("activo", "es_materia_prima", "es_producto_terminado", "categoria")
+    inlines = [DetallePorProductoInline]
     actions = ["desactivar_productos", "activar_productos"]
 
     def desactivar_productos(self, request, queryset):
@@ -53,6 +66,29 @@ class ProductoAdmin(admin.ModelAdmin):
     @admin.display(description="Unidad")
     def unidad_medida_simbolo(self, obj):
         return obj.unidad_medida.simbolo
+
+    def save_model(self, request, obj, form, change):
+        if change:
+            es_aprobador = (
+                request.user.is_superuser
+                or usuario_en_grupo(request.user, "Master", "Administrador")
+            )
+            if form.changed_data and not es_aprobador:
+                for campo in form.changed_data:
+                    CambioProducto.objects.create(
+                        producto=obj,
+                        campo=campo,
+                        valor_anterior=json.dumps(str(form.initial.get(campo, ""))),
+                        valor_nuevo=json.dumps(str(form.cleaned_data.get(campo, ""))),
+                        propuesto_por=request.user,
+                    )
+                self.message_user(
+                    request,
+                    "Cambios enviados a aprobación. No se aplicaron.",
+                    level="WARNING",
+                )
+                return
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(MovimientoInventario)
@@ -121,6 +157,53 @@ class AjusteInventarioAdmin(admin.ModelAdmin):
         if db_field.name == "producto":
             kwargs["queryset"] = Producto.objects.filter(activo=True)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(CambioProducto)
+class CambioProductoAdmin(admin.ModelAdmin):
+    list_display = ("producto", "campo", "propuesto_por", "estado", "fecha_propuesta")
+    list_filter = ("estado",)
+    readonly_fields = (
+        "producto",
+        "campo",
+        "valor_anterior",
+        "valor_nuevo",
+        "propuesto_por",
+        "fecha_propuesta",
+    )
+    actions = ["aprobar_cambios", "rechazar_cambios"]
+
+    def aprobar_cambios(self, request, queryset):
+        if not (
+            request.user.is_superuser
+            or usuario_en_grupo(request.user, "Master", "Administrador")
+        ):
+            self.message_user(request, "Sin permiso para aprobar.", level="ERROR")
+            return
+        for cambio in queryset.filter(estado="PENDIENTE"):
+            setattr(cambio.producto, cambio.campo, json.loads(cambio.valor_nuevo))
+            cambio.producto.save(update_fields=[cambio.campo])
+            cambio.estado = "APROBADO"
+            cambio.aprobado_por = request.user
+            cambio.save()
+        self.message_user(request, f"{queryset.count()} cambios aprobados.")
+
+    aprobar_cambios.short_description = "Aprobar cambios seleccionados"
+
+    def rechazar_cambios(self, request, queryset):
+        if not (
+            request.user.is_superuser
+            or usuario_en_grupo(request.user, "Master", "Administrador")
+        ):
+            self.message_user(request, "Sin permiso para rechazar.", level="ERROR")
+            return
+        for cambio in queryset.filter(estado="PENDIENTE"):
+            cambio.estado = "RECHAZADO"
+            cambio.aprobado_por = request.user
+            cambio.save()
+        self.message_user(request, f"{queryset.count()} cambios rechazados.")
+
+    rechazar_cambios.short_description = "Rechazar cambios seleccionados"
 
 # --- Sprint 2: Botones de impresion ---
 from apps.almacen.models import MovimientoInventario, AjusteInventario

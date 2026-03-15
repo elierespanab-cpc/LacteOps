@@ -7,6 +7,7 @@
         {% if fecha_desde %}Desde: {{ fecha_desde }} {% endif %}
         {% if fecha_hasta %}Hasta: {{ fecha_hasta }} {% endif %}
     </small>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -29,10 +30,41 @@
                 <option value="ANULADO" {% if request.GET.estado == 'ANULADO' %}selected{% endif %}>Anulado</option>
             </select>
         </label>
+        <span style="margin-left: 10px;">
+            <a href="?{{ request.GET.urlencode }}&nivel_detalle=1">Nivel 1</a>
+            |
+            <a href="?{{ request.GET.urlencode }}&nivel_detalle=2">Nivel 2</a>
+        </span>
         <button type="submit">Generar Reporte</button>
     </form>
 </div>
 
+{% if nivel_detalle == 1 %}
+<table>
+    <thead>
+        <tr>
+            <th>Categoria</th>
+            <th class="text-right">Total USD</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in gastos_display %}
+        <tr>
+            <td>{{ item.categoria }}</td>
+            <td class="text-right">{{ item.total|intcomma }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="2" class="text-center">No se encontraron registros.</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+            <td class="text-right">Total General USD:</td>
+            <td class="text-right">{{ total_usd|intcomma }}</td>
+        </tr>
+    </tbody>
+</table>
+{% else %}
 <table>
     <thead>
         <tr>
@@ -85,4 +117,6 @@
         </tr>
     </tbody>
 </table>
+{% endif %}
 {% endblock %}
+

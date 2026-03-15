@@ -33,3 +33,5 @@ class PrestamoPorSocioAdmin(admin.ModelAdmin):
     readonly_fields = ["numero", "monto_usd"]
     list_filter = ["estado", "moneda"]
     inlines = [PagoPrestamoInline]
+    change_form_template = "admin/print_change_form.html"
+    print_url_name = "socios:imprimir_prestamo"

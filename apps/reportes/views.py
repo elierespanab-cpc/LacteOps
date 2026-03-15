@@ -3,6 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
 from django.db.models import Sum, F, Value, DecimalField
 from django.db.models.functions import Coalesce
 
@@ -13,6 +14,8 @@ from apps.produccion.models import OrdenProduccion, ConsumoOP, SalidaOrden
 from apps.bancos.models import CuentaBancaria
 from apps.almacen.models import Producto
 from apps.compras.models import GastoServicio as Gs
+from apps.reportes.excel import exportar_excel
+from apps.core.rbac import usuario_en_grupo
 
 
 def _check_reporte_perm(request):
@@ -21,6 +24,8 @@ def _check_reporte_perm(request):
         return
     if not request.user.has_perm('reportes.view_reportelink'):
         raise PermissionDenied('No tiene permiso para acceder a los reportes.')
+
+
 
 
 @login_required
@@ -48,6 +53,88 @@ def reporte_ventas(request):
         qs = qs.filter(factura__estado__in=estados)
 
     detalles = list(qs.order_by('factura__fecha', 'factura__numero'))
+
+    if 'exportar' in request.GET:
+        columnas = [
+            "Numero",
+            "Fecha",
+            "Proveedor",
+            "Articulo",
+            "Cantidad",
+            "Precio Unitario",
+            "Subtotal",
+            "Moneda",
+            "Monto USD",
+            "Estado",
+        ]
+        filas = []
+        for d in detalles:
+            if d.factura.moneda == 'USD':
+                monto_usd = d.subtotal
+            else:
+                monto_usd = (
+                    d.subtotal / d.factura.tasa_cambio
+                    if d.factura.tasa_cambio and d.factura.tasa_cambio > 0
+                    else Decimal('0.00')
+                )
+            filas.append([
+                d.factura.numero,
+                d.factura.fecha,
+                d.factura.proveedor.razon_social if d.factura.proveedor else "",
+                f"{d.producto.codigo} - {d.producto.nombre}",
+                d.cantidad,
+                d.precio_unitario,
+                d.subtotal,
+                d.factura.moneda,
+                monto_usd,
+                d.factura.estado,
+            ])
+        return exportar_excel(
+            "reporte_compras",
+            columnas,
+            [[str(v) for v in fila] for fila in filas],
+        )
+
+    if 'exportar' in request.GET:
+        columnas = [
+            "Numero",
+            "Fecha",
+            "Cliente",
+            "Articulo",
+            "Cantidad",
+            "Precio Unitario",
+            "Subtotal",
+            "Moneda",
+            "Monto USD",
+            "Estado",
+        ]
+        filas = []
+        for d in detalles:
+            if d.factura.moneda == 'USD':
+                monto_usd = d.subtotal
+            else:
+                monto_usd = (
+                    d.subtotal / d.factura.tasa_cambio
+                    if d.factura.tasa_cambio and d.factura.tasa_cambio > 0
+                    else Decimal('0.00')
+                )
+            filas.append([
+                d.factura.numero,
+                d.factura.fecha,
+                d.factura.cliente.razon_social if d.factura.cliente else "",
+                f"{d.producto.codigo} - {d.producto.nombre}",
+                d.cantidad,
+                d.precio_unitario,
+                d.subtotal,
+                d.factura.moneda,
+                monto_usd,
+                d.factura.estado,
+            ])
+        return exportar_excel(
+            "reporte_ventas",
+            columnas,
+            [[str(v) for v in fila] for fila in filas],
+        )
 
     context = {
         'empresa': empresa,
@@ -108,6 +195,42 @@ def reporte_cxc(request):
             totales['s_31_60'] += saldo_31_60
             totales['s_61_90'] += saldo_61_90
             totales['s_90_plus'] += saldo_90_plus
+
+    if 'exportar' in request.GET:
+        columnas = [
+            "Cliente",
+            "No. Factura",
+            "Emision",
+            "Vencimiento",
+            "Dias Vencida",
+            "Monto Total",
+            "Saldo Pendiente",
+            "0-30 Dias",
+            "31-60 Dias",
+            "61-90 Dias",
+            "+90 Dias",
+        ]
+        filas = []
+        for item in resultados:
+            fv = item['factura']
+            filas.append([
+                fv.cliente.razon_social if fv.cliente else "",
+                fv.numero,
+                fv.fecha,
+                fv.fecha_vencimiento,
+                item['dias_vencida'],
+                fv.total_usd if hasattr(fv, 'total_usd') and fv.total_usd else fv.total,
+                item['saldo'],
+                item['s_0_30'],
+                item['s_31_60'],
+                item['s_61_90'],
+                item['s_90_plus'],
+            ])
+        return exportar_excel(
+            "reporte_cxc",
+            columnas,
+            [[str(v) for v in fila] for fila in filas],
+        )
 
     context = {
         'empresa': empresa,
@@ -245,6 +368,47 @@ def reporte_cxp(request):
             totales['s_61_90'] += s_61
             totales['s_90_plus'] += s_90
 
+    if 'exportar' in request.GET:
+        columnas = [
+            "Proveedor",
+            "Tipo Doc.",
+            "No. Documento",
+            "Vencimiento",
+            "Dias Vencida",
+            "Monto USD Original",
+            "Saldo Pendiente USD",
+            "0-30 Dias",
+            "31-60 Dias",
+            "61-90 Dias",
+            "+90 Dias",
+        ]
+        filas = []
+        for item in resultados:
+            doc = item['documento']
+            monto_original = (
+                doc.monto_usd
+                if item['es_gasto']
+                else (doc.total_usd if hasattr(doc, 'total_usd') and doc.total_usd else doc.total)
+            )
+            filas.append([
+                doc.proveedor.razon_social if doc.proveedor else "",
+                "Gasto/Servicio" if item['es_gasto'] else "Factura Compra",
+                doc.numero,
+                doc.fecha_vencimiento,
+                item['dias'],
+                monto_original,
+                item['saldo'],
+                item['s_0'],
+                item['s_31'],
+                item['s_61'],
+                item['s_90'],
+            ])
+        return exportar_excel(
+            "reporte_cxp",
+            columnas,
+            [[str(v) for v in fila] for fila in filas],
+        )
+
     context = {
         'empresa': empresa,
         'fecha_corte': hasta,
@@ -286,6 +450,54 @@ def reporte_produccion(request):
             else:
                 s.cu = Decimal('0.00')
 
+    if 'exportar' in request.GET:
+        columnas = [
+            "No. Orden",
+            "Fecha",
+            "Estado",
+            "Costo Total MP (USD)",
+            "Producto Obtenido",
+            "Cant. Fisica",
+            "Unidad",
+            "Kg Totales",
+            "Costo Asignado",
+            "Costo Unitario USD",
+        ]
+        filas = []
+        for orden in ordenes:
+            if orden.salidas.all():
+                for sal in orden.salidas.all():
+                    filas.append([
+                        orden.numero,
+                        orden.fecha_apertura,
+                        orden.estado,
+                        orden.mp_total,
+                        f"{sal.producto.nombre}{' (Subprod)' if sal.es_subproducto else ''}",
+                        sal.cantidad,
+                        sal.producto.unidad_medida.simbolo,
+                        sal.kg_totales if sal.kg_totales is not None else "-",
+                        sal.costo_asignado or Decimal('0.00'),
+                        sal.cu or Decimal('0.00'),
+                    ])
+            else:
+                filas.append([
+                    orden.numero,
+                    orden.fecha_apertura,
+                    orden.estado,
+                    orden.mp_total,
+                    "Sin salidas",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                ])
+        return exportar_excel(
+            "reporte_produccion",
+            columnas,
+            [[str(v) for v in fila] for fila in filas],
+        )
+
     context = {
         'empresa': empresa,
         'fecha_desde': fecha_desde,
@@ -317,13 +529,66 @@ def reporte_gastos(request):
     gastos = list(qs.order_by('fecha_emision'))
     total_usd = sum(g.monto_usd for g in gastos)
 
+    try:
+        nivel_detalle = int(request.GET.get('nivel_detalle', 2))
+    except ValueError:
+        nivel_detalle = 2
+
+    gastos_display = gastos
+    if nivel_detalle == 1:
+        agrupado = {}
+        for g in gastos:
+            cat = g.categoria_gasto.padre if g.categoria_gasto and g.categoria_gasto.padre else g.categoria_gasto
+            if not cat:
+                continue
+            agrupado.setdefault(cat, Decimal('0.00'))
+            agrupado[cat] += Decimal(str(g.monto_usd))
+        gastos_display = [
+            {'categoria': k, 'total': v} for k, v in agrupado.items()
+        ]
+
     all_categorias = set(g.categoria_gasto for g in Gs.objects.all())
+
+    if 'exportar' in request.GET:
+        if nivel_detalle == 1:
+            columnas = ["Categoria", "Total USD"]
+            filas = [[gd['categoria'], gd['total']] for gd in gastos_display]
+        else:
+            columnas = [
+                "Numero",
+                "Proveedor",
+                "Categoria",
+                "Descripcion",
+                "Monto Original",
+                "Moneda",
+                "Monto USD",
+                "Estado",
+            ]
+            filas = []
+            for g in gastos:
+                filas.append([
+                    g.numero,
+                    g.proveedor.razon_social if g.proveedor else "",
+                    g.categoria_gasto,
+                    g.descripcion,
+                    g.monto,
+                    g.moneda,
+                    g.monto_usd,
+                    g.estado,
+                ])
+        return exportar_excel(
+            "reporte_gastos",
+            columnas,
+            [[str(v) for v in fila] for fila in filas],
+        )
 
     context = {
         'empresa': empresa,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
         'gastos': gastos,
+        'gastos_display': gastos_display,
+        'nivel_detalle': nivel_detalle,
         'total_usd': total_usd,
         'todas_categorias': all_categorias,
     }
@@ -408,7 +673,11 @@ def reporte_capital_trabajo(request):
 
     # Pasivo Corriente: CxP Gastos
     cxp_gastos = Decimal('0.00')
-    for g in GastoServicio.objects.filter(estado='PENDIENTE', fecha_emision__lte=hasta):
+    gastos_base = list(
+        GastoServicio.objects.filter(estado='PENDIENTE', fecha_emision__lte=hasta)
+        .select_related('categoria_gasto', 'categoria_gasto__padre')
+    )
+    for g in gastos_base:
         cxp_gastos += Decimal(str(g.monto_usd))
     cxp_gastos = q(cxp_gastos)
 
@@ -437,6 +706,47 @@ def reporte_capital_trabajo(request):
     capital_neto = q(activo_corriente - pasivo_corriente)
     capital_trabajo = capital_neto  # alias para compatibilidad con la plantilla
 
+    try:
+        nivel_detalle = int(request.GET.get('nivel_detalle', 2))
+    except ValueError:
+        nivel_detalle = 2
+
+    gastos_display = gastos_base
+    if nivel_detalle == 1:
+        agrupado = {}
+        for g in gastos_base:
+            cat = g.categoria_gasto.padre if g.categoria_gasto and g.categoria_gasto.padre else g.categoria_gasto
+            if not cat:
+                continue
+            agrupado.setdefault(cat, Decimal('0.00'))
+            agrupado[cat] += Decimal(str(g.monto_usd))
+        gastos_display = [
+            {'categoria': k, 'total': v} for k, v in agrupado.items()
+        ]
+
+    if 'exportar' in request.GET:
+        columnas = [
+            "Concepto",
+            "Monto USD",
+        ]
+        filas = [
+            ["Efectivo y Equivalentes", efectivo],
+            ["Cuentas por Cobrar", cxc],
+            [f"Inventario ({valorar})", inventario],
+            ["Total Activo Corriente", activo_corriente],
+            ["CxP Compras", cxp_compras],
+            ["CxP Gastos", cxp_gastos],
+            ["Prestamos Corriente", prestamos_corriente],
+            ["Prestamos No Corriente", prestamos_no_corriente],
+            ["Total Pasivo Corriente", pasivo_corriente],
+            ["Capital de Trabajo Neto", capital_trabajo],
+        ]
+        return exportar_excel(
+            "capital_trabajo",
+            columnas,
+            [[str(v) for v in fila] for fila in filas],
+        )
+
     context = {
         'empresa': empresa,
         'fecha_corte': hasta,
@@ -453,5 +763,76 @@ def reporte_capital_trabajo(request):
         'pasivo_corriente': pasivo_corriente,
         'capital_neto': capital_neto,
         'capital_trabajo': capital_trabajo,
+        'gastos_display': gastos_display,
+        'nivel_detalle': nivel_detalle,
     }
     return render(request, 'reportes/capital_trabajo.html', context)
+
+
+@login_required
+def dashboard(request):
+    _check_reporte_perm(request)  # B9
+    from apps.reportes.analytics import (
+        calcular_cce,
+        calcular_precio_ponderado_leche,
+        calcular_proyeccion_caja_7d,
+        calcular_score_riesgo,
+    )
+    from apps.ventas.models import Cliente
+    from apps.core.models import Notificacion
+    ctx = {'empresa': ConfiguracionEmpresa.objects.first()}
+    es_admin = request.user.is_superuser or usuario_en_grupo(
+        request.user, 'Master', 'Administrador'
+    )
+    if es_admin:
+        ctx['cce'] = calcular_cce()
+        ctx['proyeccion'] = calcular_proyeccion_caja_7d()
+        ctx['precio_leche'] = calcular_precio_ponderado_leche()
+        ctx['scores'] = [
+            {'cliente': c, **calcular_score_riesgo(c)}
+            for c in Cliente.objects.filter(activo=True)
+        ]
+
+    notifs = Notificacion.objects.filter(activa=True)
+    leidas = request.session.get('notif_leidas', [])
+    ctx.update({'notificaciones': notifs, 'notif_leidas': leidas, 'es_admin': es_admin})
+
+    if 'exportar' in request.GET:
+        if es_admin:
+            columnas = ["Cliente", "Score", "Puntualidad", "Solvencia", "Tendencia"]
+            filas = []
+            for item in ctx.get('scores', []):
+                filas.append([
+                    item['cliente'],
+                    item.get('score'),
+                    item.get('puntualidad'),
+                    item.get('solvencia'),
+                    item.get('tendencia'),
+                ])
+        else:
+            columnas = ["Tipo", "Titulo", "Mensaje", "Entidad", "Fecha"]
+            filas = []
+            for n in notifs:
+                filas.append([
+                    n.get_tipo_display(),
+                    n.titulo,
+                    n.mensaje,
+                    f"{n.entidad} {n.entidad_id}",
+                    n.fecha_referencia,
+                ])
+        return exportar_excel(
+            "dashboard",
+            columnas,
+            [[str(v) for v in fila] for fila in filas],
+        )
+
+    return render(request, 'reportes/dashboard.html', ctx)
+
+
+@login_required
+def marcar_notificacion_leida(request, notif_id):
+    leidas = request.session.get('notif_leidas', [])
+    if notif_id not in leidas:
+        leidas.append(notif_id)
+    request.session['notif_leidas'] = leidas
+    return JsonResponse({'ok': True})
