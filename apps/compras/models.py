@@ -76,10 +76,15 @@ class FacturaCompra(AuditableModel):
         super().save(*args, **kwargs)
 
     def get_saldo_pendiente(self):
-        total_pagado = self.pagos.aggregate(
-            total=models.Sum('monto')
-        )['total'] or Decimal('0.00')
-        return self.total - total_pagado
+        """
+        Calcula el saldo pendiente en USD.
+        Usa monto_usd de cada Pago (siempre en USD) para sumar lo pagado.
+        Retorna max(0, total - pagado) para evitar saldos negativos.
+        """
+        pagado = sum(
+            p.monto_usd for p in self.pagos.all() if p.monto_usd
+        ) or Decimal('0')
+        return max(Decimal('0'), self.total - pagado)
 
     def aprobar(self):
         """

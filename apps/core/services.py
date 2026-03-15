@@ -14,6 +14,25 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 
+def get_tasa_para_fecha(fecha):
+    """
+    Retorna la TasaCambio más reciente disponible en o antes de la fecha dada.
+    Si no existe ninguna en o antes, devuelve la más próxima posterior.
+    Retorna None si no hay ninguna tasa registrada.
+
+    Args:
+        fecha (date): Fecha para la cual se busca la tasa BCV.
+
+    Returns:
+        TasaCambio | None
+    """
+    from apps.core.models import TasaCambio
+    tasa = TasaCambio.objects.filter(fecha__lte=fecha).order_by('-fecha').first()
+    if tasa is None:
+        tasa = TasaCambio.objects.filter(fecha__gt=fecha).order_by('fecha').first()
+    return tasa
+
+
 def generar_numero(tipo_documento: str) -> str:
     """
     Genera el próximo número correlativo para un tipo de documento.

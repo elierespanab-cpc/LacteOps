@@ -2,303 +2,182 @@
 trigger: always_on
 ---
 
----
-trigger: always_on
----
-
-# REGLAS GLOBALES — Parte 1: Negocio y Datos
-**LacteOps ERP v4.0 — Marzo 2026**
-Stack: Python 3.11 / Django 4.2 / PostgreSQL 15 | Moneda funcional: USD
-Continúa en: Parte 2 — Arquitectura y Sprint History
+# Reglas Globales LacteOps ERP — v5.0 Parte 1
+**Vigente desde:** Sprint 5  
+**Reemplaza:** v4.0 Parte 1A + 1B  
+**Stack:** Python 3.11 · Django 4.2 · PostgreSQL 15 · Jazzmin · Waitress · NSSM  
+**Moneda funcional:** USD  
+**Base de producción:** v0.4.1 — 119 tests en verde
 
 ---
 
-## Preámbulo
+## 1. IDENTIDAD DEL PROYECTO
 
-Reglas que aplican a todos los agentes sin excepción. Ningún agente puede
-desviarse aunque considere que existe una solución más conveniente. Son
-el contrato de negocio del sistema.
+LacteOps es un ERP agroindustrial on-premise para una planta de procesamiento lácteo venezolana. Opera en un PC Windows con Waitress + NSSM. El sistema es bimoneda (USD/VES). La moneda funcional es USD; el bolívar es moneda de transacción local. No se registran diferencias de cambio por transacción: solo se calcula reexpresión mensual comparando saldos VES a tasa inicio vs fin de mes.
 
-La v4.0 incorpora las reglas permanentes del Sprint 4: Score de Riesgo
-CxC, corrección de búsqueda TasaCambio (fecha__gte), padres no
-imputables en CategoriaGasto, modelo Notificacion, precio ponderado
-leche cruda y fix superusuario en RBAC.
+**Módulos activos:** Almacén · Compras · Ventas · Producción · Tesorería · Reportes · Core · Bancos · Socios  
+**UI Admin:** Jazzmin (definitivo). React reservado para frontend de planta en sprint futuro.  
+**Despliegue:** Whitenoise para estáticos · LAN hostname `ELIER` · sin Docker.
 
 ---
 
-## 2.1 Moneda y Tipos de Dato
+## 2. PIPELINE DE AGENTES — ROLES Y FRONTERAS
 
-La moneda funcional es USD. Todos los montos, costos, precios y totales
-se almacenan en USD.
-
-- **DecimalField obligatorio:** 18,6 para cantidades y costos unitarios.
-  18,2 para totales de factura y saldos de cuenta.
-- **FloatField absolutamente prohibido** en cualquier campo monetario o
-  de cantidad.
-- Todos los cálculos financieros en Python usan `decimal.Decimal`
-  estricto, nunca `float`.
-
-### Bimoneda USD / VES
-
-Regla de normalización única e innegociable:
-- `moneda == USD` → `tasa_cambio = Decimal('1.000000')`,
-  `monto_usd = monto`.
-- `moneda == VES` → `tasa_cambio > 0` obligatorio,
-  `monto_usd = monto / tasa_cambio`.
-
-Todo modelo transaccional con flujo de efectivo incluye tres campos
-obligatorios: `moneda` (USD/VES), `tasa_cambio` (Decimal 18,6),
-`monto_usd` (Decimal 18,2, `editable=False`, calculado en lógica de
-negocio).
-
-**Diferencial cambiario:** NO se registra por transacción individual.
-Se reconoce exclusivamente en la Reexpresión Mensual (ver Parte 2,
-§2.16).
-
----
-
-## 2.2 Inventario y Kardex
-
-Método de valoración: **Promedio Ponderado Móvil**. Única fórmula
-permitida.
-```
-nuevo_costo_promedio = (valor_stock_existente + valor_entrada)
-                       / nueva_cantidad_total
-```
-
-Las salidas se valoran al costo promedio vigente y no lo modifican.
-
-**Stock negativo absolutamente prohibido.** Nivel Python:
-`StockInsuficienteError` antes de ejecutar. Nivel BD: CHECK constraint
-en `stock_actual`. El error indica producto, stock disponible y cantidad
-requerida, sin ejecutar ninguna parte de la operación.
-
----
-
-## 2.3 Unidades de Medida
-
-Maestro configurable, no texto libre. FK al modelo `UnidadMedida`.
-Pre-cargado con: `kg`, `g`, `L`, `ml`, `unid`.
-
-En Recetas y Consumos de Orden de Producción la unidad del consumo debe
-coincidir con la del producto. Si hay discrepancia, el cierre se bloquea
-con `UnidadIncompatibleError`.
-
----
-
-## 2.4 Estados de Documentos y Transiciones
-
-| Documento | Flujo | Regla |
-|---|---|---|
-| Factura de Compra | RECIBIDA → APROBADA / ANULADA | ANULADA solo si no fue APROBADA |
-| Factura de Venta | EMITIDA → COBRADA / ANULADA | Emisión ejecuta salida de inventario |
-| Orden de Producción | ABIERTA → CERRADA / ANULADA | CERRADA bloquea edición. Reapertura requiere Master/Administrador con motivo en AuditLog |
-| Ajuste de Inventario | BORRADOR → APROBADO / ANULADO | ANULADO solo desde BORRADOR |
-| Gasto / Servicio | PENDIENTE → PAGADO / ANULADO | PAGADO asigna `cuenta_pago` |
-| Transferencia | PENDIENTE → EJECUTADA / ANULADA | ANULADA genera movimientos inversos |
-| Préstamo de Socio | ACTIVO → CANCELADO / VENCIDO | CANCELADO cuando suma pagos >= monto_principal |
-
-Los cambios de estado se ejecutan mediante métodos de negocio
-(`emitir()`, `aprobar()`, `cerrar()`, `anular()`, `ejecutar()`).
-No se editan como campos de texto.
-
----
-
-## 2.5 Atomicidad de Operaciones
-
-Toda operación que modifique stock o saldo de cuenta va dentro de
-`transaction.atomic()`. Si cualquier parte falla, todos los cambios
-se revierten.
-
-Todo acceso a saldo o stock dentro de una transacción usa
-`select_for_update()` para prevenir condiciones de carrera.
-
-> **⚠ CRÍTICO:** `select_for_update()` es obligatorio en cualquier
-> lectura de `CuentaBancaria.saldo_actual` o `Producto.stock_actual`
-> que preceda a una escritura dentro del mismo `atomic()`.
-
----
-
-## 2.6 Segregación de Funciones (RBAC)
-
-| Grupo | Permisos clave |
+| Agente | Responsabilidad exclusiva |
 |---|---|
-| Master | Acceso total. Aprueba precios, ajustes y reexpresión. Reabre órdenes cerradas. |
-| Administrador | Igual que Master excepto gestión de usuarios y configuración técnica. |
-| Jefe Producción | CRUD Órdenes de Producción, aprobación de ajustes bajo umbral. |
-| Asistente Compras | CRUD Facturas de Compra y Gastos. Sin acceso a Ventas ni Tesorería. |
-| Asistente Ventas | CRUD Facturas de Venta con lista de precios activa y aprobada. Sin Compras ni Tesorería. |
+| **Gemini Flash** | Modelos (`models.py`), migraciones, esquema de BD |
+| **Claude Code** | Lógica de negocio (`services.py`), Admin overrides financieros (`save_model`, `save_formset`), tests |
+| **OpenCode** | Admin UI/UX (JS, inlines visuales, plantillas, sidebar, estáticos) |
 
-- Permisos cargados vía `fixtures/rbac.json`, aplicado en signal
-  `post_migrate` de `apps/core/apps.py`.
-- Decorador `require_group(*grupos)` en `apps/core/rbac.py`: verifica
-  pertenencia → `PermissionDenied` si no cumple.
-- **Superusuario siempre pasa `require_group` sin importar grupos
-  asignados.** Primera verificación en toda función que chequee grupos:
-  `if user.is_superuser: return True`. ★ NUEVO v4.0
-- **Los reportes operativos son vistas Django protegidas con
-  `@login_required`.** El acceso se concede explícitamente en
-  `rbac.json` a los grupos Master y Administrador. Ningún otro grupo
-  ve reportes por defecto.
-- **Umbral de aprobación dual:** `default=1000` USD. Ajustes por encima
-  requieren Master o Administrador.
+**Regla absoluta:** Ningún agente toca los archivos del otro sin instrucción explícita. Una violación de frontera se reporta inmediatamente y se revierte.
+
+**Secuencia de fases:** Gemini siempre ejecuta primero. Claude Code y OpenCode arrancan en paralelo **solo** después de `HANDOFF_GEM` con 0 issues y pytest verde.
 
 ---
 
-## 2.7 Separación de Responsabilidades entre Agentes
+## 3. REGLAS DE CÓDIGO — INVARIANTES ABSOLUTAS
 
-| Agente | IDE | Responsabilidad | Restricción |
-|---|---|---|---|
-| Gemini Flash 3 | Antigravity | Modelos: campos, Meta, migraciones | Sin métodos de negocio. Sin migraciones destructivas. |
-| Claude Sonnet 4.6 | Antigravity / Claude Code | services.py, analytics.py, correcciones lógica, tests QA | Sin modificar esquema directamente |
-| Codex GPT 5.4 | Antigravity | Admin, Jazzmin, scaffolding, vistas print, Task Scheduler, Excel | Sin métodos de negocio |
+### 3.1 Aritmética financiera
+- **NUNCA usar `float` en cálculos financieros.** Toda operación monetaria usa `Decimal` de Python.
+- Precisión estándar: `quantize(Decimal('0.01'))` para montos; `Decimal('0.000001')` para tasas de cambio y costos unitarios.
+- Los campos monetarios en modelos son `DecimalField` con `max_digits` y `decimal_places` explícitos.
+- En tests: toda aserción financiera compara `Decimal` exacto, nunca `float` ni `round()`.
 
-**Handoff entre agentes:** cada agente escribe su entregable en
-`HANDOFF_<FASE>.md` en la raíz del proyecto. El agente siguiente lee
-ese archivo antes de iniciar.
+### 3.2 Concurrencia e integridad
+- Toda operación que modifique saldo monetario, stock o movimiento de caja se ejecuta dentro de `transaction.atomic()`.
+- Usar `select_for_update()` sobre el objeto principal cuando haya riesgo de escritura concurrente (Producto, CuentaBancaria, Socio).
+- El patrón de detección new/existing es `self._state.adding` (nunca `self.pk` para este propósito).
+
+### 3.3 Migraciones
+- Migraciones de **esquema** y migraciones de **datos** (`RunPython`) van en **archivos separados**.
+- Ejecutar `pg_dump` antes de cualquier migración destructiva (eliminar campo, cambiar tipo, cambiar `unique`).
+- `python manage.py check` debe dar 0 issues antes y después de cada fase.
+
+### 3.4 Tests
+- **No modificar tests existentes** para hacer pasar código nuevo. Si un test falla, corregir el código.
+- Toda aserción sobre `monto_usd`, `costo_promedio`, `stock_actual` o `saldo_pendiente` usa `Decimal` exacto.
+- Fixture loading requiere rutas relativas explícitas.
 
 ---
 
-## 2.8 Series de Numeración Automática
+## 4. MODELO BIMONEDA — REGLAS DE ORO
 
-Formato: `PREFIJO-NNNN` con relleno de ceros (mínimo 4 dígitos).
-Modelo `Secuencia` en `apps/core/models.py`.
+### 4.1 Documentos con moneda VES
+1. Al seleccionar fecha en un documento VES → cargar tasa BCV automáticamente (campo `tasa_cambio` `editable=False` en UI).
+2. `get_tasa_para_fecha(fecha)` busca **hacia adelante**: `TasaCambio.objects.filter(fecha__gte=fecha).order_by('fecha').first()` (el BCV publica hoy la tasa que rige el próximo día hábil).
+3. Si no existe tasa → guardar en BORRADOR con advertencia. En `emitir()`/`aprobar()`: `raise EstadoInvalidoError('Sin tasa BCV para fecha del documento.')`.
+4. Documentos USD: `tasa_cambio = Decimal('1.000000')`, sin validación BCV.
 
-| Serie | Uso |
+### 4.2 Pagos y Cobros — Regla de Oro Admin
+**⚠ El Admin NUNCA puede guardar un Pago o Cobro con `monto_usd = 0`.**  
+Si `monto_usd` llega a cero, significa que la lógica de negocio no fue invocada.
+
+**Patrón correcto en `save_formset` de `FacturaCompraAdmin` y `FacturaVentaAdmin`:**
+
+```python
+def save_formset(self, request, form, formset, change):
+    instances = formset.save(commit=False)
+    for obj in instances:
+        if isinstance(obj, Pago) and obj._state.adding:
+            tasa = get_tasa_para_fecha(obj.fecha or date.today())
+            if obj.moneda == 'VES' and not tasa:
+                messages.error(request, f'Sin tasa BCV para {obj.fecha}. Pago no guardado.')
+                continue
+            tasa_val = tasa.tasa if tasa else Decimal('1.000000')
+            if obj.moneda == 'VES':
+                obj.monto_usd = (obj.monto / tasa_val).quantize(Decimal('0.01'))
+                obj.tasa_cambio = tasa_val
+            else:
+                obj.monto_usd = obj.monto
+                obj.tasa_cambio = Decimal('1.000000')
+            obj.save()
+            # generar MovimientoCaja si hay cuenta_origen
+        else:
+            obj.save()
+    formset.save_m2m()
+```
+
+El mismo patrón aplica para `Cobro` en `FacturaVentaAdmin`.
+
+### 4.3 Diferencias de cambio
+No se registran diferenciales por transacción. La reexpresión es mensual: comparar saldos VES a tasa inicio de mes vs tasa fin de mes.
+
+### 4.4 Tasa histórica BCV
+La automatización BCV usa el scraper externo de Elier (GitHub). Soporta fechas históricas. El endpoint y formato del API son provistos por Elier antes de cada sprint que lo requiera.
+
+---
+
+## 5. MOVIMIENTOCAJA — REGLAS DE GENERACIÓN
+
+- Todo Pago (compras) y Cobro (ventas) con `cuenta_origen`/`cuenta_destino` genera un `MovimientoCaja` (o equivalente en `CuentaBancaria`) al momento de guardarse desde el Admin.
+- Los movimientos de tesorería directa (sin documento fuente) también generan `MovimientoCaja`.
+- `MovimientoCaja` es **inmutable** una vez creado: no se edita, solo se revierte con un movimiento compensatorio.
+- Detección de nuevo registro: `self._state.adding`.
+
+---
+
+## 6. ESTADOS DE DOCUMENTOS Y REVERSIÓN
+
+### 6.1 Ciclo de vida estándar
+`BORRADOR → EMITIDO/APROBADO → CERRADO`  
+Documentos cerrados no son editables desde el Admin sin acción explícita de reversión.
+
+### 6.2 Órdenes de Producción
+- `CERRADA`: no editable, afecta inventario de forma definitiva.
+- `REABIERTA`: movimientos revertidos. Puede editarse y cerrarse de nuevo.
+- Una OP reabierta y con movimientos revertidos puede **eliminarse**. `SalidaOrden` usa `on_delete=CASCADE` (no PROTECT): son datos derivados de la OP.
+
+### 6.3 Numeración automática
+Todos los documentos con número de secuencia usan numeración automática. El número lo asigna el sistema, no el usuario, excepto en `FacturaCompra` donde el número lo asigna el proveedor.
+
+---
+
+## 7. UNICIDAD DE DOCUMENTOS
+
+| Documento | Regla de unicidad |
 |---|---|
-| VTA- | Facturas de Venta |
-| COM- | Facturas de Compra |
-| INV- | Ajustes de Inventario |
-| PRO- | Órdenes de Producción |
-| TES- | Movimientos de Tesorería directos |
-| APC- | Gastos y Servicios |
-| SOC- | Préstamos de Socios |
+| `FacturaCompra.numero` | `unique_together = [('proveedor', 'numero')]` — el número es del proveedor, puede repetirse entre proveedores distintos |
+| Demás documentos internos | `unique=True` global o secuencia automática del sistema |
 
-**Reglas:**
-- `generar_numero(tipo_documento)` en `apps/core/services.py` con
-  `select_for_update()` dentro de `transaction.atomic()`.
-- Campo `numero` en todos los modelos: `editable=False`, asignado en
-  `save()` solo cuando `_state.adding == True`.
-- Número asignado nunca se reutiliza aunque el documento sea anulado.
+**⚠ `FacturaCompra` no tiene `unique=True` a nivel de campo `numero`. Requiere `unique_together` en `Meta`.**
 
 ---
 
-## 2.17 Producción Conjunta ★ v3.1
+## 8. RECÁLCULO DE STOCK — ALGORITMO PPM
 
-- `OrdenProduccion` siempre tiene una o más `SalidaOrden`. No existe FK
-  directa a producto terminado.
-- Sin al menos una `SalidaOrden` con `es_subproducto=False` →
-  `EstadoInvalidoError` al cerrar.
-- **Fórmula de distribución de costo:**
-```
-valor_i          = salida_i.precio_referencia × salida_i.cantidad
-valor_total      = Σ valor_i  (solo no-subproductos)
-costo_asignado_i = costo_total × (valor_i / valor_total)
-```
-- **Residuo de redondeo:** el producto con mayor `valor_i` absorbe la
-  diferencia. `Σ costo_asignado == costo_total` exacto.
-- **Subproductos:** `costo_asignado = Decimal('0.000000')`.
-- Al cerrar: calcular `kg_totales_salida` y
-  `rendimiento_real = kg_totales_salida / materia_prima_kg`.
+La función `recalcular_stock(producto)` en `apps/almacen/services.py`:
+
+1. Lee **todos** los `MovimientoInventario` del producto ordenados por `fecha ASC, id ASC`.
+2. Recalcula `stock_actual` y `costo_promedio` transacción a transacción usando Precio Promedio Móvil (PPM).
+3. Guarda resultado en `producto.stock_actual` y `producto.costo_promedio` via `instance.save()`.
+4. Se ejecuta dentro de `transaction.atomic()` con `select_for_update()` sobre el producto.
+5. **Nunca modifica los `MovimientoInventario` existentes** — solo recalcula los campos del `Producto`.
+6. `stock_actual` nunca queda negativo: `max(Decimal('0'), stock_calculado)`.
+7. Es idempotente: dos llamadas consecutivas producen el mismo resultado.
+
+**Algoritmo PPM en cada movimiento:**
+- `ENTRADA`: `nuevo_costo_prom = (stock × costo_prom + cantidad × costo_unitario) / (stock + cantidad)`; `stock += cantidad`
+- `SALIDA`: `stock -= cantidad` (costo_promedio no cambia)
 
 ---
 
-## 2.18 Listas de Precio ★ v3.1
+## 9. SALDO PENDIENTE CXP/CXC
 
-- Toda `FacturaVenta` requiere `ListaPrecio` asignada al emitirse.
-- `precio_unitario` en `DetalleFacturaVenta` es `editable=False`.
-  Se asigna desde `DetalleLista.precio` al emitir.
-- Producto sin `DetalleLista` con `aprobado=True` →
-  `EstadoInvalidoError`.
-- Solo Master o Administrador aprueban precios y crean listas.
-- **Cambio de precio en `DetalleLista.save()`:** si no es creación y
-  `precio` cambia → `aprobado=False`, `aprobado_por=None`. ★ NUEVO v4.0
-
----
-
-## 2.21 TasaCambio ★ v3.2 — Actualizado v4.0
-
-- Modelo `TasaCambio` en `apps/core/models.py`: `fecha` (DateField
-  unique), `tasa` (Decimal 18,6), `fuente` (BCV_AUTO / BCV_MANUAL /
-  USUARIO).
-- **Búsqueda correcta:** el BCV publica HOY la tasa que rige el próximo
-  día hábil. La búsqueda siempre va hacia adelante:
+`FacturaCompra.get_saldo_pendiente()`:
 ```python
-  TasaCambio.objects.filter(fecha__gte=fecha_doc).order_by('fecha').first()
+def get_saldo_pendiente(self):
+    pagado = sum(p.monto_usd for p in self.pagos.all() if p.monto_usd) or Decimal('0')
+    return max(Decimal('0'), self.total - pagado)
 ```
-  *(La búsqueda `__lte` queda abolida.)* ★ CORREGIDO v4.0
-- **En documentos VES:** al seleccionar fecha → cargar tasa
-  automáticamente (campo `tasa_cambio` `editable=False` en UI).
-- **Si no existe tasa:** guardar en BORRADOR es permitido, pero
-  `emitir()` / `aprobar()` lanzan
-  `EstadoInvalidoError('Sin tasa BCV vigente para la fecha del
-  documento.')`.
-- **Documentos USD:** `tasa_cambio = Decimal('1.000000')`, sin consulta
-  a `TasaCambio`.
-- El scraper histórico (`importar_historico_bcv`) y botón Admin pueblan
-  la tabla. Comando diario a las 6am vía Task Scheduler.
-- Backfill de días sin publicación: tasa del día hábil siguiente.
+
+- El reporte CxP usa `get_saldo_pendiente()` para cada factura y **excluye** facturas con saldo ≤ 0.
+- No mostrar el monto original de la factura como saldo si ya tiene pagos parciales.
+- Equivalente para `FacturaVenta` en CxC.
 
 ---
 
-## 2.22 CategoriaGasto ★ v3.2 — Actualizado v4.0
+## 10. CATEGORÍAS DE GASTO
 
-- Árbol de dos niveles: categoría padre → subcategoría hija. FK self
-  null=True.
-- **Categorías con `padre=None` son solo agrupadores. No imputables en
-  ningún documento.** ★ NUEVO v4.0
-- Validación en `GastoServicio.save()`:
-```python
-  if self.categoria_gasto and self.categoria_gasto.padre is None:
-      raise ValidationError('Seleccione una subcategoría, '
-                            'no una categoría padre.')
-```
-- Campo `contexto`: FACTURA (para GastoServicio) o TESORERIA (para
-  MovimientoTesoreria). No mezclable.
-- En reportes: `nivel_detalle=1` agrupa por padre, `nivel_detalle=2`
-  muestra subcategorías. ★ NUEVO v4.0
-
----
-
-## 2.23 Socios y Préstamos ★ v3.2
-
-- `Socio` es modelo independiente. No es `Proveedor`.
-- `PrestamoPorSocio`: pasivo de la empresa. Genera
-  `MovimientoCaja ENTRADA` al registrarse si hay cuenta destino.
-- `PagoPrestamo`: genera `MovimientoCaja SALIDA` si hay cuenta origen.
-- Capital de Trabajo: préstamo es **pasivo corriente** si
-  `fecha_vencimiento <= hoy + 365 días`, **no corriente** si mayor o
-  si `None`.
-- CxP incluye préstamos de socios en aging con los mismos buckets
-  0-30, 31-60, 61-90, +90 días.
-
----
-
-## 2.24 MovimientoTesoreria ★ v3.2
-
-- Documento de origen para cargos/abonos directos sin factura.
-- **Siempre genera un `MovimientoCaja`** en la cuenta seleccionada
-  dentro del mismo `transaction.atomic()`.
-- **Inmutable post-creación.** Mismo patrón que `MovimientoCaja`.
-- `categoria` FK a `CategoriaGasto` con `contexto == TESORERIA`
-  obligatorio.
-- Genera voucher imprimible. Afecta saldo de cuenta y aparece en
-  Capital de Trabajo.
-
----
-
-## 2.25 Sidebar Jazzmin — Orden Canónico ★ v3.2
-
-El sidebar debe respetar este orden en
-`JAZZMIN_SETTINGS['order_with_respect_to']`:
-```
-ventas → compras → produccion → almacen → bancos → socios
-→ reportes → core → auth
-```
-Las secciones deben estar colapsadas por defecto
-(`navigation_expanded: False`). El modelo dummy `ReporteLink` nunca es
-visible en el sidebar (`has_module_perms` retorna False).
-
----
-
-*LacteOps ERP v4.0 — Parte 1 de 2*
+- Categorías raíz (`padre=None`) son **solo agrupadores**: no imputables en documentos.
+- Validación en `GastoServicio.save()`: si `categoria_gasto.padre is None` → `raise ValidationError(...)`.
+- En reportes: `nivel_detalle=1` agrupa por padre; `nivel_detalle=2` muestra subcategorías.

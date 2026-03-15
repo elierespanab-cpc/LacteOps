@@ -23,6 +23,53 @@ from apps.core.exceptions import StockInsuficienteError
 logger = logging.getLogger(__name__)
 
 
+def recalcular_stock(producto):
+    """
+    Recalcula stock_actual y costo_promedio del producto procesando todos sus
+    MovimientoInventario en orden cronológico, usando Promedio Ponderado Móvil.
+
+    Útil para corregir inconsistencias tras ajustes manuales o importaciones.
+
+    Args:
+        producto (Producto): Instancia del producto a recalcular.
+
+    Returns:
+        dict: {'stock': Decimal, 'costo_promedio': Decimal}
+    """
+    from apps.almacen.models import MovimientoInventario
+
+    movimientos = MovimientoInventario.objects.filter(
+        producto=producto
+    ).order_by('fecha', 'id')
+
+    stock = Decimal('0')
+    costo_prom = Decimal('0')
+
+    for mov in movimientos:
+        if mov.tipo == 'ENTRADA':
+            valor_existente = stock * costo_prom
+            valor_entrada = mov.cantidad * mov.costo_unitario
+            nueva_cantidad = stock + mov.cantidad
+            if nueva_cantidad > 0:
+                costo_prom = (valor_existente + valor_entrada) / nueva_cantidad
+            stock = nueva_cantidad
+        elif mov.tipo == 'SALIDA':
+            stock = max(Decimal('0'), stock - mov.cantidad)
+
+    with transaction.atomic():
+        from apps.almacen.models import Producto as ProductoModel
+        prod = ProductoModel.objects.select_for_update().get(pk=producto.pk)
+        prod.stock_actual = stock.quantize(Decimal('0.0001'))
+        prod.costo_promedio = costo_prom.quantize(Decimal('0.000001'))
+        prod.save(update_fields=['stock_actual', 'costo_promedio'])
+
+    logger.info(
+        'recalcular_stock | Producto: %s | Stock: %s | CostoPromedio: %s',
+        producto, prod.stock_actual, prod.costo_promedio,
+    )
+    return {'stock': prod.stock_actual, 'costo_promedio': prod.costo_promedio}
+
+
 def convertir_a_usd(monto, moneda, tasa_cambio):
     """
     Convierte un monto a USD según la moneda y la tasa de cambio.
