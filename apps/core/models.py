@@ -146,6 +146,11 @@ class ConfiguracionEmpresa(models.Model):
     telefono = models.CharField(max_length=50, verbose_name="Teléfono")
     email = models.EmailField(null=True, blank=True, verbose_name="Email")
     pie_documento = models.TextField(blank=True, verbose_name="Pie de Documento")
+    fecha_venta_abierta = models.BooleanField(
+        default=False,
+        verbose_name='Fecha de venta editable',
+        help_text='Si True: usuario ingresa fecha. Si False: fecha del SO al emitir.'
+    )
 
     class Meta:
         verbose_name = "Configuración de Empresa"

@@ -410,7 +410,7 @@ class ConsumoOP(AuditableModel):
 
 
 class SalidaOrden(AuditableModel):
-    orden = models.ForeignKey(OrdenProduccion, related_name='salidas', on_delete=models.PROTECT, verbose_name="Orden")
+    orden = models.ForeignKey(OrdenProduccion, related_name='salidas', on_delete=models.CASCADE, verbose_name="Orden")
     producto = models.ForeignKey(Producto, on_delete=models.PROTECT, verbose_name="Producto")
     cantidad = models.DecimalField(max_digits=18, decimal_places=4, verbose_name="Cantidad")
     precio_referencia = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Precio Referencia")

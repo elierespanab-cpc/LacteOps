@@ -50,7 +50,7 @@ class FacturaCompra(AuditableModel):
         ('VES', 'VES - Bolívar Soberano'),
     ]
 
-    numero = models.CharField(max_length=20, unique=True, verbose_name="Número de Factura")
+    numero = models.CharField(max_length=20, verbose_name="Número de Factura")
     proveedor = models.ForeignKey(Proveedor, on_delete=models.PROTECT, verbose_name="Proveedor")
     fecha = models.DateField(verbose_name="Fecha")
     fecha_vencimiento = models.DateField(null=True, blank=True, verbose_name="Fecha de Vencimiento")
@@ -64,6 +64,7 @@ class FacturaCompra(AuditableModel):
         verbose_name = "Factura de Compra"
         verbose_name_plural = "Facturas de Compra"
         ordering = ['-fecha', '-numero']
+        unique_together = [('proveedor', 'numero')]
 
     def __str__(self):
         return f"Factura Compra {self.numero} - {self.proveedor.nombre}"
