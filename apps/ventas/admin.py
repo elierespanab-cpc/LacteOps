@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+from datetime import date
 from decimal import Decimal
 
 from django.contrib import admin, messages
@@ -7,13 +8,21 @@ from django.contrib import admin, messages
 from apps.ventas.models import Cliente, FacturaVenta, DetalleFacturaVenta, Cobro
 from apps.almacen.models import Producto
 from apps.core.exceptions import LacteOpsError
+from apps.core.services import get_tasa_para_fecha
 
 logger = logging.getLogger(__name__)
 
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "rif", "telefono", "limite_credito", "get_saldo_total_pendiente", "activo")
+    list_display = (
+        "nombre",
+        "rif",
+        "telefono",
+        "limite_credito",
+        "get_saldo_total_pendiente",
+        "activo",
+    )
     search_fields = ("nombre", "rif")
     list_filter = ("activo",)
 
@@ -41,14 +50,44 @@ class CobroInline(admin.TabularInline):
 @admin.register(FacturaVenta)
 class FacturaVentaAdmin(admin.ModelAdmin):
     inlines = [DetalleFacturaVentaInline, CobroInline]
-    list_display = ("numero", "cliente", "fecha", "estado", "moneda", "total", "get_saldo_pendiente")
-    readonly_fields = ("total", "estado", "alerta_credito")
+    list_display = (
+        "numero",
+        "cliente",
+        "fecha",
+        "estado",
+        "moneda",
+        "total",
+        "get_saldo_pendiente",
+    )
+    readonly_fields = ("total", "estado", "alerta_credito", "tasa_cambio")
     search_fields = ("numero", "cliente__nombre", "cliente__rif")
     list_filter = ("estado", "moneda", "fecha")
     actions = ["emitir_facturas", "marcar_cobradas"]
 
     class Media:
         js = ("admin/js/calcular_subtotal.js",)
+        css = {"all": ("admin/css/ocultar_campo.css",)}
+
+    def get_readonly_fields(self, request, obj=None):
+        ro = list(self.readonly_fields)
+        ro.append("moneda")
+        from apps.core.models import ConfiguracionEmpresa
+
+        config = ConfiguracionEmpresa.objects.first()
+        if config and not config.fecha_venta_abierta:
+            ro.append("fecha")
+        return ro
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if "moneda" in form.base_fields:
+            form.base_fields["moneda"].initial = "USD"
+        return form
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["show_save_and_add_another"] = False
+        return super().changeform_view(request, object_id, form_url, extra_context)
 
     @admin.display(description="Saldo Pendiente")
     def get_saldo_pendiente(self, obj):
@@ -71,27 +110,71 @@ class FacturaVentaAdmin(admin.ModelAdmin):
         for obj in queryset:
             try:
                 obj.emitir()
-                messages.success(request, f'Exitoso: {obj}')
+                messages.success(request, f"Exitoso: {obj}")
             except LacteOpsError as e:
-                messages.error(request, f'Error en {obj}: {e.message}')
+                messages.error(request, f"Error en {obj}: {e.message}")
             except Exception as e:
-                logger.error('Error inesperado emitiendo %s: %s', obj, e, exc_info=True)
-                messages.error(request, f'Error inesperado en {obj}. Ver logs.')
+                logger.error("Error inesperado emitiendo %s: %s", obj, e, exc_info=True)
+                messages.error(request, f"Error inesperado en {obj}. Ver logs.")
 
-    emitir_facturas.short_description = 'Emitir facturas seleccionadas (descontar inventario)'
+    emitir_facturas.short_description = (
+        "Emitir facturas seleccionadas (descontar inventario)"
+    )
 
     def marcar_cobradas(self, request, queryset):
         for obj in queryset:
             try:
                 obj.marcar_cobrada()
-                messages.success(request, f'Exitoso: {obj}')
+                messages.success(request, f"Exitoso: {obj}")
             except LacteOpsError as e:
-                messages.error(request, f'Error en {obj}: {e.message}')
+                messages.error(request, f"Error en {obj}: {e.message}")
             except Exception as e:
-                logger.error('Error inesperado marcando cobrada %s: %s', obj, e, exc_info=True)
-                messages.error(request, f'Error inesperado en {obj}. Ver logs.')
+                logger.error(
+                    "Error inesperado marcando cobrada %s: %s", obj, e, exc_info=True
+                )
+                messages.error(request, f"Error inesperado en {obj}. Ver logs.")
 
-    marcar_cobradas.short_description = 'Marcar facturas como cobradas'
+    marcar_cobradas.short_description = "Marcar facturas como cobradas"
+
+    def save_formset(self, request, form, formset, change):
+        """
+        FIX C2: Calcula monto_usd con bimoneda al crear Cobros desde el inline.
+        Si el cobro es en VES y no hay tasa BCV disponible, lo omite con error.
+        Si hay cuenta_destino, registra el MovimientoCaja correspondiente.
+        """
+        instances = formset.save(commit=False)
+        for obj in instances:
+            if isinstance(obj, Cobro) and obj._state.adding:
+                tasa = get_tasa_para_fecha(obj.fecha or date.today())
+                if obj.moneda == "VES" and not tasa:
+                    messages.error(
+                        request,
+                        f"Sin tasa BCV para {obj.fecha}. Cobro no guardado.",
+                    )
+                    continue
+                tasa_val = tasa.tasa if tasa else Decimal("1.000000")
+                if obj.moneda == "VES":
+                    obj.monto_usd = (obj.monto / tasa_val).quantize(Decimal("0.01"))
+                    obj.tasa_cambio = tasa_val
+                else:
+                    obj.monto_usd = obj.monto
+                    obj.tasa_cambio = Decimal("1.000000")
+                obj.save()
+                if obj.cuenta_destino:
+                    from apps.bancos.services import registrar_movimiento_caja
+
+                    registrar_movimiento_caja(
+                        cuenta=obj.cuenta_destino,
+                        tipo="ENTRADA",
+                        monto=obj.monto,
+                        moneda=obj.moneda,
+                        tasa_cambio=obj.tasa_cambio,
+                        referencia=obj.factura.numero,
+                    )
+            else:
+                obj.save()
+        formset.save_m2m()
+
 
 # --- Sprint 2: Listas de precios y boton imprimir ---
 from django.core.exceptions import PermissionDenied
@@ -135,7 +218,9 @@ class ListaPrecioAdmin(admin.ModelAdmin):
                 except PermissionDenied as e:
                     messages.error(request, str(e))
                 except Exception as e:
-                    logger.error("Error aprobando precio %s: %s", detalle, e, exc_info=True)
+                    logger.error(
+                        "Error aprobando precio %s: %s", detalle, e, exc_info=True
+                    )
                     messages.error(request, f"Error aprobando {detalle}. Ver logs.")
 
     aprobar_precios.short_description = "Aprobar precios de listas seleccionadas"

@@ -1,0 +1,3 @@
+/* Ocultar campo moneda en FacturaVenta admin */
+#id_moneda { display: none; }
+label[for="id_moneda"] { display: none; }

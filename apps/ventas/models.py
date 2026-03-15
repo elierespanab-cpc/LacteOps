@@ -157,6 +157,13 @@ class FacturaVenta(AuditableModel):
         if self.estado != 'EMITIDA':
             raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir')
 
+        # ── FIX C2: Respetar fecha_venta_abierta ────────────────────────────────
+        # Si la configuración no permite edición manual de fecha, forzar fecha SO.
+        from apps.core.models import ConfiguracionEmpresa
+        config = ConfiguracionEmpresa.objects.first()
+        if config and not config.fecha_venta_abierta:
+            self.fecha = date.today()
+
         # ── FASE 0: Validación de Tasa de Cambio (Sprint 4) ────────────────────
         if self.moneda == 'VES' and self.tasa_cambio == Decimal('1.000000'):
             from apps.core.models import TasaCambio
@@ -183,9 +190,9 @@ class FacturaVenta(AuditableModel):
         # ── FASE 1: Control de crédito ────────────────────────────────────────
         hoy = date.today()
 
-        # Asignar fecha_vencimiento en este momento
+        # Asignar fecha_vencimiento en este momento (y persitir fecha si fue forzada)
         self.fecha_vencimiento = self.fecha + timedelta(days=self.cliente.dias_credito)
-        self.save(update_fields=['fecha_vencimiento', 'tasa_cambio'])
+        self.save(update_fields=['fecha', 'fecha_vencimiento', 'tasa_cambio'])
 
         # Buscar facturas vencidas del mismo cliente
         facturas_vencidas = []

@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 import os
 
 from decouple import config, Csv
@@ -157,7 +157,7 @@ JAZZMIN_SETTINGS = {
         "core",
         "auth",
     ],
-    "hide_models": ["reportes.ReporteLink"],
+    "hide_models": ["reportes.ReporteLink", "core.RespaldoBD"],
     "icons": {
         "almacen.producto": "fas fa-boxes",
         "almacen.movimientoinventario": "fas fa-exchange-alt",
@@ -183,26 +183,52 @@ JAZZMIN_SETTINGS = {
     },
     "custom_links": {
         "reportes": [
-            {"name": "Dashboard", "url": "reportes:dashboard", "icon": "fas fa-tachometer-alt"},
+            {
+                "name": "Dashboard",
+                "url": "reportes:dashboard",
+                "icon": "fas fa-tachometer-alt",
+            },
             {"name": "Ventas", "url": "reportes:ventas", "icon": "fas fa-chart-line"},
-            {"name": "Cuentas por Cobrar", "url": "reportes:cxc", "icon": "fas fa-hand-holding-usd"},
-            {"name": "Compras", "url": "reportes:compras", "icon": "fas fa-shopping-cart"},
-            {"name": "Cuentas por Pagar", "url": "reportes:cxp", "icon": "fas fa-file-invoice-dollar"},
-            {"name": "ProducciÃ³n", "url": "reportes:produccion", "icon": "fas fa-industry"},
-            {"name": "Gastos y Servicios", "url": "reportes:gastos", "icon": "fas fa-receipt"},
-            {"name": "Capital de Trabajo", "url": "reportes:capital_trabajo", "icon": "fas fa-chart-pie"},
+            {
+                "name": "Cuentas por Cobrar",
+                "url": "reportes:cxc",
+                "icon": "fas fa-hand-holding-usd",
+            },
+            {
+                "name": "Compras",
+                "url": "reportes:compras",
+                "icon": "fas fa-shopping-cart",
+            },
+            {
+                "name": "Cuentas por Pagar",
+                "url": "reportes:cxp",
+                "icon": "fas fa-file-invoice-dollar",
+            },
+            {
+                "name": "ProducciÃ³n",
+                "url": "reportes:produccion",
+                "icon": "fas fa-industry",
+            },
+            {
+                "name": "Gastos y Servicios",
+                "url": "reportes:gastos",
+                "icon": "fas fa-receipt",
+            },
+            {
+                "name": "Capital de Trabajo",
+                "url": "reportes:capital_trabajo",
+                "icon": "fas fa-chart-pie",
+            },
             {"name": "Stock", "url": "reportes:stock", "icon": "fas fa-boxes"},
         ],
         "core": [
             {"name": "Respaldo BD", "url": "/respaldo-bd/", "icon": "fas fa-database"},
         ],
-    }
+    },
 }
-DEFAULT_CHARSET = 'utf-8'
+DEFAULT_CHARSET = "utf-8"
 
 # Redirigir login_required al login del Admin
 LOGIN_URL = "/admin/login/"
 
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-
-

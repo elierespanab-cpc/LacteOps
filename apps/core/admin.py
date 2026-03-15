@@ -1,4 +1,4 @@
-﻿import os
+import os
 import subprocess
 import tempfile
 from io import StringIO
@@ -17,7 +17,14 @@ from apps.bancos.models import RespaldoBD
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
-    list_display = ("fecha_hora", "usuario", "modulo", "accion", "entidad", "entidad_id")
+    list_display = (
+        "fecha_hora",
+        "usuario",
+        "modulo",
+        "accion",
+        "entidad",
+        "entidad_id",
+    )
     list_filter = ("accion", "modulo", "fecha_hora")
     search_fields = ("usuario__username", "entidad")
 
@@ -32,6 +39,7 @@ class AuditLogAdmin(admin.ModelAdmin):
 
     def has_view_permission(self, request, obj=None):
         return True
+
 
 # --- Sprint 2: Configuracion de Empresa (singleton) ---
 @admin.register(ConfiguracionEmpresa)
@@ -75,10 +83,14 @@ class CategoriaGastoAdmin(admin.ModelAdmin):
     nombre_indentado.short_description = "CategorÃ­a"
 
     def get_queryset(self, request):
-        return super().get_queryset(request).order_by(
-            "contexto",
-            functions.Coalesce("padre__nombre", "nombre"),
-            "nombre",
+        return (
+            super()
+            .get_queryset(request)
+            .order_by(
+                "contexto",
+                functions.Coalesce("padre__nombre", "nombre"),
+                "nombre",
+            )
         )
 
 
@@ -86,22 +98,29 @@ def vista_respaldo_bd(request):
     if not request.user.is_superuser:
         raise PermissionDenied
     from django.conf import settings
+
     db = settings.DATABASES["default"]
     env = os.environ.copy()
     env["PGPASSWORD"] = db["PASSWORD"]
     with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as tmp:
         tmp_path = tmp.name
     from datetime import datetime
+
     filename = f"lacteops_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
     try:
         result = subprocess.run(
             [
                 "pg_dump",
-                "-h", db.get("HOST", "localhost"),
-                "-p", str(db.get("PORT", "5432")),
-                "-U", db["USER"],
-                "-F", "p",
-                "-f", tmp_path,
+                "-h",
+                db.get("HOST", "localhost"),
+                "-p",
+                str(db.get("PORT", "5432")),
+                "-U",
+                db["USER"],
+                "-F",
+                "p",
+                "-f",
+                tmp_path,
                 db["NAME"],
             ],
             env=env,
@@ -132,7 +151,13 @@ def vista_respaldo_bd(request):
 
 @admin.register(RespaldoBD)
 class RespaldoBDAdmin(admin.ModelAdmin):
-    list_display = ("fecha", "ejecutado_por", "nombre_archivo", "tamanio_bytes", "exitoso")
+    list_display = (
+        "fecha",
+        "ejecutado_por",
+        "nombre_archivo",
+        "tamanio_bytes",
+        "exitoso",
+    )
     list_filter = ("exitoso",)
 
     def has_add_permission(self, request):
@@ -145,3 +170,16 @@ class RespaldoBDAdmin(admin.ModelAdmin):
         return False
 
 
+def api_tasa_fecha(request):
+    from django.http import JsonResponse
+    from datetime import datetime
+    from apps.core.models import TasaCambio
+
+    fecha_str = request.GET.get("fecha", "")
+    try:
+        fecha = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return JsonResponse({"tasa": "1.000000"})
+    obj = TasaCambio.objects.filter(fecha__gte=fecha).order_by("fecha").first()
+    tasa = str(obj.tasa) if obj else "1.000000"
+    return JsonResponse({"tasa": tasa})

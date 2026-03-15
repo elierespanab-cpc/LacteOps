@@ -1,22 +1,31 @@
-﻿{% extends 'reportes/base_reporte.html' %}
+{% extends 'reportes/base_reporte.html' %}
 {% load humanize %}
 
 {% block report_title %}
     Reporte de Stock
     <br><small>
         {% if solo_activos %}Solo productos activos{% else %}Todos los productos{% endif %}
+        {% if request.GET.fecha %} | Fecha: {{ request.GET.fecha }}{% endif %}
+        {% if request.GET.con_stock %} | Solo con stock{% endif %}
     </small>
 {% endblock %}
 
 {% block content %}
 <div class="no-print filters">
     <form method="get">
-        <input type="hidden" name="activos" value="0">
+        <label>
+            Fecha de corte:
+            <input type="date" name="fecha" value="{{ request.GET.fecha|default:today }}">
+        </label>
+        <label>
+            <input type="checkbox" name="con_stock" value="1" {% if request.GET.con_stock == '1' %}checked{% endif %}>
+            Solo productos con stock
+        </label>
         <label>
             <input type="checkbox" name="activos" value="1" {% if solo_activos %}checked{% endif %}>
             Solo productos activos
         </label>
-        <button type="submit">Aplicar</button>
+        <button type="submit">Actualizar</button>
     </form>
 </div>
 

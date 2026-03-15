@@ -1,32 +1,35 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ title }} - LacteOps</title>
-    <style>
-        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px; color: #333; }
-        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #ccc; padding-bottom: 10px; }
-        .header h1 { margin: 0; font-size: 18px; }
-        .header p { margin: 2px 0; font-size: 12px; color: #555; }
-        .report-title { text-align: center; margin: 15px 0; font-size: 16px; font-weight: bold; }
-        .filters { margin-bottom: 20px; font-size: 11px; background: #f9f9f9; padding: 10px; border: 1px solid #ddd; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
-        th { background-color: #f2f2f2; font-weight: bold; }
-        .text-right { text-align: right; }
-        .text-center { text-align: center; }
-        .total-row { font-weight: bold; background-color: #eee; }
-        .group-header { font-weight: bold; background-color: #e0e0e0; padding-top: 15px; }
-        @media print {
-            .no-print { display: none; }
-            body { font-size: 10px; }
-            .filters { border: none; background: none; padding: 0; }
-        }
-    </style>
-</head>
-<body>
+{% extends 'admin/base.html' %}
+{% load i18n %}
+
+{% block title %}{{ title }} - LacteOps{% endblock %}
+
+{% block extrastyle %}
+<style>
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px; color: #333; }
+    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #ccc; padding-bottom: 10px; }
+    .header h1 { margin: 0; font-size: 18px; }
+    .header p { margin: 2px 0; font-size: 12px; color: #555; }
+    .report-title { text-align: center; margin: 15px 0; font-size: 16px; font-weight: bold; }
+    .filters { margin-bottom: 20px; font-size: 11px; background: #f9f9f9; padding: 10px; border: 1px solid #ddd; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+    th { background-color: #f2f2f2; font-weight: bold; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+    .total-row { font-weight: bold; background-color: #eee; }
+    .group-header { font-weight: bold; background-color: #e0e0e0; padding-top: 15px; }
+    @media print {
+        .no-print { display: none; }
+        body { font-size: 10px; }
+        .filters { border: none; background: none; padding: 0; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
     <div class="no-print" style="margin-bottom: 20px;">
-        <button onclick="window.print()" style="padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px;">🖨️ Imprimir Reporte</button>
+        <button onclick="window.print()" style="padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px;">Imprimir Reporte</button>
         <button onclick="history.back()" style="padding: 8px 15px; cursor: pointer; background: #6c757d; color: white; border: none; border-radius: 4px; margin-left: 10px;">Volver</button>
         {% if request.GET %}
             <a href="?{{ request.GET.urlencode }}&exportar=1" style="padding: 8px 15px; background: #28a745; color: white; border-radius: 4px; text-decoration: none; margin-left: 10px;">Exportar Excel</a>
@@ -38,19 +41,19 @@
     <div class="header">
         {% if empresa %}
             <h1>{{ empresa.nombre_comercial }}</h1>
-            <p><strong>Razón Social:</strong> {{ empresa.razon_social }} | <strong>RIF:</strong> {{ empresa.rif }}</p>
+            <p><strong>Razn Social:</strong> {{ empresa.razon_social }} | <strong>RIF:</strong> {{ empresa.rif }}</p>
             <p>{{ empresa.direccion }}</p>
         {% else %}
             <h1>LacteOps ERP</h1>
-            <p>Empresa no configurada (Configuración General)</p>
+            <p>Empresa no configurada (Configuracin General)</p>
         {% endif %}
     </div>
 
     <div class="report-title">
-        {% block report_title %}Título del Reporte{% endblock %}
+        {% block report_title %}Ttulo del Reporte{% endblock %}
     </div>
 
-    {% block content %}
+    {% block report_content %}
     {% endblock %}
-</body>
-</html>
+</div>
+{% endblock %}
