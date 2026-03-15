@@ -88,6 +88,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # REGLA: modificaciones en modelos que heredan de AuditableModel deben hacerse via instancia.save(),
 # nunca via QuerySet.update().
 
+FIXTURE_DIRS = [
+    BASE_DIR / "fixtures",
+]
+
 LOG_DIR = BASE_DIR / "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -177,6 +181,7 @@ JAZZMIN_SETTINGS = {
     },
     "custom_links": {
         "reportes": [
+            {"name": "Dashboard", "url": "reportes:dashboard", "icon": "fas fa-tachometer-alt"},
             {"name": "Ventas", "url": "reportes:ventas", "icon": "fas fa-chart-line"},
             {"name": "Cuentas por Cobrar", "url": "reportes:cxc", "icon": "fas fa-hand-holding-usd"},
             {"name": "Compras", "url": "reportes:compras", "icon": "fas fa-shopping-cart"},
@@ -184,7 +189,10 @@ JAZZMIN_SETTINGS = {
             {"name": "Producción", "url": "reportes:produccion", "icon": "fas fa-industry"},
             {"name": "Gastos y Servicios", "url": "reportes:gastos", "icon": "fas fa-receipt"},
             {"name": "Capital de Trabajo", "url": "reportes:capital_trabajo", "icon": "fas fa-chart-pie"},
-        ]
+        ],
+        "core": [
+            {"name": "Respaldo BD", "url": "/admin/respaldo-bd/", "icon": "fas fa-database"},
+        ],
     }
 }
 DEFAULT_CHARSET = 'utf-8'
