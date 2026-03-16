@@ -186,7 +186,7 @@ class Pago(AuditableModel):
 
     factura = models.ForeignKey(FacturaCompra, related_name='pagos', on_delete=models.PROTECT, verbose_name="Factura de Compra")
     fecha = models.DateField(verbose_name="Fecha de Pago")
-    monto = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Monto del Pago (USD)")
+    monto = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Monto")
     moneda = models.CharField(max_length=3, choices=FacturaCompra.MONEDA_CHOICES, default='USD', verbose_name="Moneda")
     tasa_cambio = models.DecimalField(max_digits=18, decimal_places=6, default=Decimal('1.000000'), verbose_name="Tasa de Cambio (VES/USD)")
     monto_usd = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal('0.00'), editable=False, verbose_name="Monto en USD")

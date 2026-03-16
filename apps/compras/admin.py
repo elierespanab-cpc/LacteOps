@@ -171,6 +171,47 @@ from apps.compras.models import Pago, GastoServicio
 class PagoAdmin(admin.ModelAdmin):
     list_display = ("factura", "fecha", "monto", "moneda", "monto_usd", "medio_pago")
 
+    class Media:
+        js = ("admin/js/tasa_auto_pago_standalone.js",)
+
+    def save_model(self, request, obj, form, change):
+        """
+        FIX: Calcula monto_usd con bimoneda al crear Pagos desde el formulario
+        independiente de PagoAdmin (punto de entrada distinto al inline).
+        Si el pago es en VES y no hay tasa BCV disponible, lo omite con error.
+        Si hay cuenta_origen, registra el MovimientoCaja correspondiente.
+        """
+        es_nuevo = obj._state.adding
+        if es_nuevo:
+            tasa = get_tasa_para_fecha(obj.fecha or date.today())
+            if obj.moneda == "VES" and not tasa:
+                messages.error(
+                    request,
+                    f"Sin tasa BCV para {obj.fecha}. Pago no guardado.",
+                )
+                return
+            tasa_val = tasa.tasa if tasa else Decimal("1.000000")
+            if obj.moneda == "VES":
+                obj.monto_usd = (obj.monto / tasa_val).quantize(Decimal("0.01"))
+                obj.tasa_cambio = tasa_val
+            else:
+                obj.monto_usd = obj.monto
+                obj.tasa_cambio = Decimal("1.000000")
+
+        super().save_model(request, obj, form, change)
+
+        if es_nuevo and obj.cuenta_origen:
+            from apps.bancos.services import registrar_movimiento_caja
+
+            registrar_movimiento_caja(
+                cuenta=obj.cuenta_origen,
+                tipo="SALIDA",
+                monto=obj.monto,
+                moneda=obj.moneda,
+                tasa_cambio=obj.tasa_cambio,
+                referencia=obj.factura.numero if obj.factura else "",
+            )
+
 
 _gasto_admin = admin.site._registry.get(GastoServicio)
 if _gasto_admin:

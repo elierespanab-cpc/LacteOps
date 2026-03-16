@@ -330,7 +330,7 @@ class Cobro(AuditableModel):
 
     factura = models.ForeignKey(FacturaVenta, related_name='cobros', on_delete=models.PROTECT, verbose_name="Factura de Venta")
     fecha = models.DateField(verbose_name="Fecha de Cobro")
-    monto = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Monto del Cobro (USD)")
+    monto = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Monto")
     moneda = models.CharField(max_length=3, choices=FacturaVenta.MONEDA_CHOICES, default='USD', verbose_name="Moneda")
     tasa_cambio = models.DecimalField(max_digits=18, decimal_places=6, default=Decimal('1.000000'), verbose_name="Tasa de Cambio (VES/USD)")
     monto_usd = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal('0.00'), editable=False, verbose_name="Monto en USD")
