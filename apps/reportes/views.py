@@ -957,11 +957,18 @@ def reporte_stock(request):
         qs = qs.filter(activo=True)
     qs = qs.order_by("codigo")
 
+    es_hoy = fecha_corte == date_module.today()
+
     productos = []
     total_costo = Decimal("0")
     total_venta = Decimal("0")
     for p in qs:
-        stock_calc, costo_prom = stock_a_fecha(p, fecha_corte)
+        if es_hoy:
+            # Usar valores cacheados del producto para que coincida con la pantalla Productos
+            stock_calc = Decimal(str(p.stock_actual))
+            costo_prom = Decimal(str(p.costo_promedio))
+        else:
+            stock_calc, costo_prom = stock_a_fecha(p, fecha_corte)
         if solo_con_stock and stock_calc == 0:
             continue
         valor_costo = (stock_calc * costo_prom).quantize(Decimal("0.01"))
