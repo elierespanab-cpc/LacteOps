@@ -38,23 +38,26 @@ def recalcular_stock(producto):
     """
     from apps.almacen.models import MovimientoInventario
 
-    movimientos = MovimientoInventario.objects.filter(
-        producto=producto
-    ).order_by('fecha', 'id')
+    # DIM-06-002: values_list + iterator() — tuplas ligeras, sin cachear el QS entero
+    movimientos = (
+        MovimientoInventario.objects.filter(producto=producto)
+        .order_by('fecha', 'id')
+        .values_list('tipo', 'cantidad', 'costo_unitario')
+    )
 
     stock = Decimal('0')
     costo_prom = Decimal('0')
 
-    for mov in movimientos:
-        if mov.tipo == 'ENTRADA':
+    for tipo, cantidad, costo_unitario in movimientos.iterator():
+        if tipo == 'ENTRADA':
             valor_existente = stock * costo_prom
-            valor_entrada = mov.cantidad * mov.costo_unitario
-            nueva_cantidad = stock + mov.cantidad
+            valor_entrada = cantidad * costo_unitario
+            nueva_cantidad = stock + cantidad
             if nueva_cantidad > 0:
                 costo_prom = (valor_existente + valor_entrada) / nueva_cantidad
             stock = nueva_cantidad
-        elif mov.tipo == 'SALIDA':
-            stock = max(Decimal('0'), stock - mov.cantidad)
+        elif tipo == 'SALIDA':
+            stock = max(Decimal('0'), stock - cantidad)
 
     with transaction.atomic():
         from apps.almacen.models import Producto as ProductoModel

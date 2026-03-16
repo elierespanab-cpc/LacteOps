@@ -4,7 +4,7 @@ from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
-from django.db.models import Sum, F, Value, DecimalField
+from django.db.models import Q, Sum, F, Value, DecimalField
 from django.db.models.functions import Coalesce
 
 from apps.core.models import ConfiguracionEmpresa
@@ -186,9 +186,18 @@ def reporte_cxc(request):
         else datetime.date.today()
     )
 
-    facturas = FacturaVenta.objects.filter(
-        estado="EMITIDA", fecha__lte=hasta
-    ).select_related("cliente")
+    # DIM-06-001: un solo SELECT con SUM condicional — elimina N+1 por cobros
+    facturas = (
+        FacturaVenta.objects.filter(estado="EMITIDA", fecha__lte=hasta)
+        .select_related("cliente")
+        .annotate(
+            cobrado_hasta=Coalesce(
+                Sum("cobros__monto", filter=Q(cobros__fecha__lte=hasta)),
+                Value(Decimal("0.00")),
+                output_field=DecimalField(),
+            )
+        )
+    )
 
     resultados = []
     totales = {
@@ -201,12 +210,7 @@ def reporte_cxc(request):
     }
 
     for fv in facturas:
-        cobrado_hasta = (
-            sum(c.monto for c in fv.cobros.filter(fecha__lte=hasta))
-            if hasattr(fv, "cobros")
-            else Decimal("0.00")
-        )
-        saldo = fv.total - cobrado_hasta
+        saldo = fv.total - fv.cobrado_hasta
         if saldo > 0:
             dias_vencida = (
                 (hasta - fv.fecha_vencimiento).days if fv.fecha_vencimiento else 0
@@ -517,7 +521,7 @@ def reporte_produccion(request):
         qs = qs.filter(fecha_apertura__lte=fecha_hasta)
 
     ordenes = list(
-        qs.prefetch_related("salidas__producto__unidad_medida").order_by(
+        qs.prefetch_related("salidas__producto__unidad_medida", "consumos").order_by(
             "-fecha_apertura"
         )
     )
@@ -752,12 +756,20 @@ def reporte_capital_trabajo(request):
                 efectivo += Decimal(str(cta.saldo_actual)) / tasa_ves
     efectivo = q(efectivo)
 
-    # Activo Corriente: CxC
+    # Activo Corriente: CxC — DIM-06-001: un solo SELECT con SUM condicional
     cxc = Decimal("0.00")
-    facturas_emitidas = FacturaVenta.objects.filter(estado="EMITIDA", fecha__lte=hasta)
+    facturas_emitidas = (
+        FacturaVenta.objects.filter(estado="EMITIDA", fecha__lte=hasta)
+        .annotate(
+            cobrado_hasta=Coalesce(
+                Sum("cobros__monto", filter=Q(cobros__fecha__lte=hasta)),
+                Value(Decimal("0.00")),
+                output_field=DecimalField(),
+            )
+        )
+    )
     for f in facturas_emitidas:
-        cobros = sum(c.monto for c in f.cobros.filter(fecha__lte=hasta))
-        saldo = Decimal(str(f.total)) - Decimal(str(cobros))
+        saldo = Decimal(str(f.total)) - Decimal(str(f.cobrado_hasta))
         if saldo > 0 and (not f.fecha_vencimiento or f.fecha_vencimiento >= hasta):
             cxc += saldo
     cxc = q(cxc)
@@ -936,20 +948,25 @@ def reporte_stock(request):
     solo_con_stock = request.GET.get("con_stock", "0") == "1"
 
     def stock_a_fecha(producto, fecha):
-        movs = MovimientoInventario.objects.filter(
-            producto=producto, fecha__date__lte=fecha
-        ).order_by("fecha", "id")
+        # DIM-06-002: values_list devuelve tuplas ligeras, sin instanciar el modelo
+        movs = (
+            MovimientoInventario.objects.filter(
+                producto=producto, fecha__date__lte=fecha
+            )
+            .order_by("fecha", "id")
+            .values_list("tipo", "cantidad", "costo_unitario")
+        )
         stock = Decimal("0")
         costo = Decimal("0")
-        for m in movs:
-            if m.tipo == "ENTRADA":
+        for tipo, cantidad, costo_unitario in movs:
+            if tipo == "ENTRADA":
                 ve = stock * costo
-                vn = m.cantidad * m.costo_unitario
-                nq = stock + m.cantidad
+                vn = cantidad * costo_unitario
+                nq = stock + cantidad
                 costo = (ve + vn) / nq if nq > 0 else costo
                 stock = nq
-            elif m.tipo == "SALIDA":
-                stock = max(Decimal("0"), stock - m.cantidad)
+            elif tipo == "SALIDA":
+                stock = max(Decimal("0"), stock - cantidad)
         return stock, costo
 
     qs = Producto.objects.select_related("unidad_medida")
