@@ -1,6 +1,7 @@
 import json
+import logging
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from apps.almacen.models import (
     Categoria,
     UnidadMedida,
@@ -8,8 +9,11 @@ from apps.almacen.models import (
     MovimientoInventario,
     CambioProducto,
 )
+from apps.almacen.services import recalcular_stock
 from apps.core.rbac import usuario_en_grupo
 from apps.ventas.admin import DetallePorProductoInline
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -43,7 +47,7 @@ class ProductoAdmin(admin.ModelAdmin):
     search_fields = ("codigo", "nombre")
     list_filter = ("activo", "es_materia_prima", "es_producto_terminado", "categoria")
     inlines = [DetallePorProductoInline]
-    actions = ["desactivar_productos", "activar_productos"]
+    actions = ["desactivar_productos", "activar_productos", "recalcular_stock_productos"]
 
     def desactivar_productos(self, request, queryset):
         rows_updated = queryset.update(activo=False)
@@ -62,6 +66,26 @@ class ProductoAdmin(admin.ModelAdmin):
             message_bit = f"{rows_updated} productos fueron activados"
         self.message_user(request, f"{message_bit} exitosamente.")
     activar_productos.short_description = "Activar productos seleccionados"
+
+    def recalcular_stock_productos(self, request, queryset):
+        """Recalcula stock_actual y costo_promedio desde el Kardex (PPM)."""
+        for producto in queryset:
+            try:
+                result = recalcular_stock(producto)
+                messages.success(
+                    request,
+                    f"{producto.nombre}: stock={result['stock']}, "
+                    f"costo_promedio={result['costo_promedio']}",
+                )
+            except Exception as e:
+                logger.error(
+                    "Error recalculando stock %s: %s", producto, e, exc_info=True
+                )
+                messages.error(request, f"Error en {producto.nombre}: {e}")
+
+    recalcular_stock_productos.short_description = (
+        "Recalcular stock y costo promedio (desde Kardex)"
+    )
 
     @admin.display(description="Unidad")
     def unidad_medida_simbolo(self, obj):

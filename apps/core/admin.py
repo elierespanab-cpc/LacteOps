@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.db.models import functions
 
 from apps.core.models import AuditLog, ConfiguracionEmpresa, TasaCambio, CategoriaGasto
+from apps.core.rbac import usuario_en_grupo
 from apps.bancos.models import RespaldoBD
 
 
@@ -95,7 +96,10 @@ class CategoriaGastoAdmin(admin.ModelAdmin):
 
 
 def vista_respaldo_bd(request):
-    if not request.user.is_superuser:
+    if not (
+        request.user.is_superuser
+        or usuario_en_grupo(request.user, "Master", "Administrador")
+    ):
         raise PermissionDenied
     from django.conf import settings
 
