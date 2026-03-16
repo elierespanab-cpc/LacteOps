@@ -183,9 +183,10 @@ def api_tasa_fecha(request):
     try:
         fecha = datetime.strptime(fecha_str, "%Y-%m-%d").date()
     except (ValueError, TypeError):
-        return JsonResponse({"tasa": "1.000000"})
-    obj = TasaCambio.objects.filter(fecha__gte=fecha).order_by("fecha").first()
-    tasa = str(obj.tasa) if obj else "1.000000"
+        return JsonResponse({"tasa": None})
+    # fecha__lte: tasa más reciente disponible hasta esa fecha (no hacia el futuro)
+    obj = TasaCambio.objects.filter(fecha__lte=fecha).order_by("-fecha").first()
+    tasa = str(obj.tasa) if obj else None
     return JsonResponse({"tasa": tasa})
 
 

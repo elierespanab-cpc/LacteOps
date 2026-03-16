@@ -21,6 +21,6 @@ urlpatterns = [
     path("reportes/", include("apps.reportes.urls", namespace="reportes")),
     path("socios/", include("apps.socios.urls")),
     path("respaldo-bd/", login_required(vista_respaldo_bd), name="respaldo_bd"),
-    path("api/tasa/", api_tasa_fecha, name="api_tasa"),
+    path("api/tasa/", login_required(api_tasa_fecha), name="api_tasa"),
     path("api/precio/", login_required(api_precio_lista), name="api_precio"),
 ]

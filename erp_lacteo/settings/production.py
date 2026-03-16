@@ -14,3 +14,19 @@ DATABASES = {
         "PORT": config("DB_PORT", default="5432"),
     }
 }
+
+# ── Seguridad de cookies y sesión (DIM-01-002) ──────────────────────────────
+SESSION_COOKIE_SECURE = True        # Solo enviar cookie por HTTPS
+SESSION_COOKIE_HTTPONLY = True      # No accesible desde JavaScript
+SESSION_COOKIE_SAMESITE = "Strict"  # Protección CSRF cross-site
+SESSION_COOKIE_AGE = 28800          # Sesión expira a las 8 horas
+
+CSRF_COOKIE_SECURE = True           # Cookie CSRF solo por HTTPS
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default="https://localhost",
+).split(",")
+
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"

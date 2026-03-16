@@ -25,16 +25,18 @@ def calcular_add_mes(cliente, anio, mes):
 def calcular_slope_add(cliente):
     """Regresión lineal simple x=[0,1,2] y=[ADD_m0,ADD_m1,ADD_m2].
     Retorna pendiente. Positivo=deterioro, Negativo=mejora.
+    Usa Decimal en todos los cálculos para mantener precisión financiera.
     """
     hoy = date.today()
     adds = []
     for offset in range(3):
         ref = (hoy.replace(day=1) - timedelta(days=offset * 30))
-        adds.append(float(calcular_add_mes(cliente, ref.year, ref.month)))
-    x_mean, y_mean = 1.0, sum(adds) / 3
-    num = sum((i - x_mean) * (adds[i] - y_mean) for i in range(3))
-    den = sum((i - x_mean) ** 2 for i in range(3))
-    return num / den if den != 0 else 0.0
+        adds.append(calcular_add_mes(cliente, ref.year, ref.month))
+    x_mean = Decimal('1')
+    y_mean = sum(adds) / Decimal('3')
+    num = sum((Decimal(str(i)) - x_mean) * (adds[i] - y_mean) for i in range(3))
+    den = sum((Decimal(str(i)) - x_mean) ** 2 for i in range(3))
+    return num / den if den != Decimal('0') else Decimal('0')
 
 
 def calcular_score_riesgo(cliente):
@@ -52,10 +54,10 @@ def calcular_score_riesgo(cliente):
     ru = min(Decimal('1'), saldo / lim if lim > 0 else Decimal('1'))
     pm = d60 / saldo if saldo > 0 else Decimal('0')
     solv = max(Decimal('0'), min(Decimal('100'), 100 * (1 - ru) * (1 - pm)))
-    # Tendencia
-    slope = calcular_slope_add(cliente)
-    tend_raw = max(-1.0, min(1.0, -slope / 5))
-    tend = max(Decimal('0'), min(Decimal('100'), Decimal(str(tend_raw * 100 + 50))))
+    # Tendencia — normalizar slope a Decimal por si viene de mock o float externo
+    slope = Decimal(str(calcular_slope_add(cliente)))
+    tend_raw = max(Decimal('-1'), min(Decimal('1'), -slope / Decimal('5')))
+    tend = max(Decimal('0'), min(Decimal('100'), tend_raw * Decimal('100') + Decimal('50')))
     score = (Decimal('0.40') * punt + Decimal('0.30') * solv + Decimal('0.30') * tend).quantize(Decimal('0.1'))
     return {
         'score': score,
