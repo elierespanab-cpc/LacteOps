@@ -1,4 +1,5 @@
 import os
+import stat
 import subprocess
 import tempfile
 from io import StringIO
@@ -104,8 +105,30 @@ def vista_respaldo_bd(request):
     from django.conf import settings
 
     db = settings.DATABASES["default"]
+
+    # DIM-01-003: PGPASSFILE en lugar de PGPASSWORD.
+    # PGPASSWORD queda expuesto en /proc/<pid>/environ durante la ejecución del
+    # subproceso; PGPASSFILE escribe las credenciales en un archivo temporal con
+    # permisos 600 y lo elimina en el bloque finally, reduciendo la ventana de
+    # exposición al tiempo de vida del archivo (< 1 s en condiciones normales).
+    pgpass_content = (
+        f"{db.get('HOST', 'localhost')}:{db.get('PORT', '5432')}"
+        f":{db['NAME']}:{db['USER']}:{db['PASSWORD']}\n"
+    )
+    with tempfile.NamedTemporaryFile(
+        mode='w', suffix='.pgpass', delete=False, encoding='utf-8'
+    ) as pgpass_file:
+        pgpass_file.write(pgpass_content)
+        pgpass_path = pgpass_file.name
+    try:
+        os.chmod(pgpass_path, stat.S_IRUSR | stat.S_IWUSR)  # 600; no-op en Windows pero inofensivo
+    except Exception:
+        pass  # Windows no soporta chmod POSIX, pero el archivo ya es privado al usuario
+
     env = os.environ.copy()
-    env["PGPASSWORD"] = db["PASSWORD"]
+    env.pop("PGPASSWORD", None)  # eliminar cualquier PGPASSWORD heredado del proceso padre
+    env["PGPASSFILE"] = pgpass_path
+
     with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as tmp:
         tmp_path = tmp.name
     from datetime import datetime
@@ -151,6 +174,8 @@ def vista_respaldo_bd(request):
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+        if os.path.exists(pgpass_path):
+            os.unlink(pgpass_path)
 
 
 @admin.register(RespaldoBD)

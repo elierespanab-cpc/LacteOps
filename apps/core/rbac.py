@@ -35,7 +35,12 @@ def setup_groups():
 def require_group(*grupos):
     """
     Decorador de vista para verificar que el usuario pertenece a uno de los grupos dados.
-    Si el usuario es superusuario, siempre se le permite el acceso.
+
+    Superusuarios (is_superuser=True) tienen acceso irrestricto. Esto replica el
+    comportamiento estándar de Django: has_perm() siempre retorna True para superusuarios.
+    DIM-01-004 — by design: is_superuser está reservado para cuentas de administración
+    del sistema (DBA/DevOps). Los operadores del ERP DEBEN usar el sistema de grupos;
+    ningún operador debe tener is_superuser=True.
     """
     def decorator(func):
         @wraps(func)
@@ -54,7 +59,7 @@ def usuario_en_grupo(usuario, *grupos):
     """
     Versión funcional (no decorador) de require_group.
     Retorna True si el usuario pertenece a alguno de los grupos,
-    o si es superusuario. Retorna False en caso contrario.
+    o si es superusuario (DIM-01-004 — by design). Retorna False en caso contrario.
     No lanza excepciones.
     """
     if hasattr(usuario, 'is_superuser') and usuario.is_superuser:
