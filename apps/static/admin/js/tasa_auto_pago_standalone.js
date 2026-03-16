@@ -55,8 +55,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // VES: consultar la API
-    fetch('/api/tasa/?fecha=' + fecha)
-      .then(function (response) { return response.json(); })
+    // DIM-05-002: URLSearchParams evita inyección de caracteres especiales en la URL
+    // DIM-05-003: errores de red y HTTP son visibles al operador mediante mostrarAviso()
+    fetch('/api/tasa/?' + new URLSearchParams({ fecha: fecha }))
+      .then(function (response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      })
       .then(function (data) {
         if (data.tasa) {
           tasaInput.value = data.tasa;
@@ -69,6 +74,8 @@ document.addEventListener('DOMContentLoaded', function () {
       })
       .catch(function (err) {
         console.error('Error obteniendo tasa BCV:', err);
+        tasaInput.removeAttribute('readonly');
+        mostrarAviso('\u26a0\ufe0f Error de red al consultar tasa BCV. Ingrese la tasa manualmente.');
       });
   }
 
