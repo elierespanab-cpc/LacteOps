@@ -10,3 +10,6 @@ DATABASES = {
 }
 
 LOGGING["loggers"]["apps"]["level"] = "DEBUG"
+
+# Acceso desde la red local (móviles y otras PCs en la misma red)
+ALLOWED_HOSTS = ["*"]

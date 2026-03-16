@@ -142,7 +142,7 @@ JAZZMIN_SETTINGS = {
     "site_brand": "LacteOps",
     "welcome_sign": "Bienvenido a LacteOps",
     "theme": "default",
-    "navigation_expanded": True,
+    "navigation_expanded": False,
     "show_ui_builder": False,
     "custom_index": "reportes:dashboard",
     "collapsible_nav": True,
@@ -159,35 +159,60 @@ JAZZMIN_SETTINGS = {
     ],
     "hide_models": ["reportes.ReporteLink", "core.RespaldoBD"],
     "icons": {
+        # ── Iconos de grupo (cabecera del menú colapsado) ─────────────────
+        "ventas": "fas fa-shopping-bag",
+        "compras": "fas fa-truck",
+        "produccion": "fas fa-industry",
+        "almacen": "fas fa-warehouse",
+        "bancos": "fas fa-university",
+        "socios": "fas fa-users",
+        "reportes": "fas fa-chart-bar",
+        "core": "fas fa-cogs",
+        "auth": "fas fa-shield-alt",
+        # ── Modelos individuales ──────────────────────────────────────────
+        # Ventas
+        "ventas.cliente": "fas fa-users",
+        "ventas.facturaventa": "fas fa-receipt",
+        "ventas.cobro": "fas fa-money-check-alt",
+        "ventas.listaprecio": "fas fa-tags",
+        "ventas.detallelista": "fas fa-tag",
+        # Compras
+        "compras.facturacompra": "fas fa-file-invoice-dollar",
+        "compras.gastoservicio": "fas fa-file-invoice",
+        "compras.pago": "fas fa-credit-card",
+        "compras.proveedor": "fas fa-truck",
+        # Producción
+        "produccion.receta": "fas fa-clipboard-list",
+        "produccion.ordenproduccion": "fas fa-industry",
+        "produccion.salidaorden": "fas fa-boxes",
+        # Almacén
         "almacen.producto": "fas fa-boxes",
         "almacen.movimientoinventario": "fas fa-exchange-alt",
         "almacen.ajusteinventario": "fas fa-balance-scale",
-        "compras.facturacompra": "fas fa-file-invoice-dollar",
-        "compras.gastoservicio": "fas fa-file-invoice",
-        "ventas.facturaventa": "fas fa-receipt",
-        "ventas.listaprecio": "fas fa-tags",
-        "ventas.detallelista": "fas fa-tag",
-        "produccion.ordenproduccion": "fas fa-industry",
-        "produccion.salidaorden": "fas fa-boxes",
-        "core.configuracionempresa": "fas fa-building",
+        "almacen.categoria": "fas fa-layer-group",
+        "almacen.unidadmedida": "fas fa-ruler",
+        "almacen.cambioproducto": "fas fa-sync-alt",
+        # Bancos
         "bancos.cuentabancaria": "fas fa-university",
         "bancos.movimientocaja": "fas fa-money-bill-wave",
         "bancos.transferenciacuentas": "fas fa-random",
         "bancos.movimientotesoreria": "fas fa-exchange-alt",
         "bancos.periodoreexpresado": "fas fa-calendar-check",
+        # Core
+        "core.configuracionempresa": "fas fa-building",
         "core.tasacambio": "fas fa-dollar-sign",
         "core.categoriagasto": "fas fa-tags",
         "core.auditlog": "fas fa-history",
+        # Socios
         "socios.socio": "fas fa-user-tie",
         "socios.prestamoporsocio": "fas fa-hand-holding-usd",
+        "socios.pagoprestamo": "fas fa-wallet",
+        # Auth
+        "auth.user": "fas fa-users-cog",
+        "auth.group": "fas fa-shield-alt",
     },
     "custom_links": {
         "reportes": [
-            {
-                "name": "Dashboard",
-                "url": "reportes:dashboard",
-                "icon": "fas fa-tachometer-alt",
-            },
             {"name": "Ventas", "url": "reportes:ventas", "icon": "fas fa-chart-line"},
             {
                 "name": "Cuentas por Cobrar",

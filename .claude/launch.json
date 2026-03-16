@@ -4,7 +4,7 @@
     {
       "name": "Django Dev Server",
       "runtimeExecutable": "C:\\Users\\elier\\Documents\\Desarollos\\LacteOps\\venv\\Scripts\\python.exe",
-      "runtimeArgs": ["C:\\Users\\elier\\Documents\\Desarollos\\LacteOps\\manage.py", "runserver", "8000"],
+      "runtimeArgs": ["C:\\Users\\elier\\Documents\\Desarollos\\LacteOps\\manage.py", "runserver", "0.0.0.0:8000"],
       "port": 8000
     },
     {
