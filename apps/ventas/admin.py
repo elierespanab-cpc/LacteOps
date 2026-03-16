@@ -65,7 +65,8 @@ class FacturaVentaAdmin(admin.ModelAdmin):
     actions = ["emitir_facturas", "marcar_cobradas"]
 
     class Media:
-        js = ("admin/js/calcular_subtotal.js",)
+        # tasa_auto_pago.js también carga para el CobroInline dentro de FacturaVenta
+        js = ("admin/js/calcular_subtotal.js", "admin/js/tasa_auto_pago.js")
         css = {"all": ("admin/css/ocultar_campo.css",)}
 
     def get_readonly_fields(self, request, obj=None):
@@ -138,10 +139,15 @@ class FacturaVentaAdmin(admin.ModelAdmin):
 
     def save_formset(self, request, form, formset, change):
         """
-        FIX C2: Calcula monto_usd con bimoneda al crear Cobros desde el inline.
+        Calcula monto_usd con bimoneda al crear Cobros desde el inline.
         Si el cobro es en VES y no hay tasa BCV disponible, lo omite con error.
         Si hay cuenta_destino, registra el MovimientoCaja correspondiente.
+
+        FIX saldo: normaliza el monto a la moneda de la cuenta antes de llamar
+        a registrar_movimiento_caja, evitando la comparación cruzada USD vs VES.
         """
+        from apps.bancos.services import registrar_movimiento_caja
+
         instances = formset.save(commit=False)
         for obj in instances:
             if isinstance(obj, Cobro) and obj._state.adding:
@@ -161,16 +167,41 @@ class FacturaVentaAdmin(admin.ModelAdmin):
                     obj.tasa_cambio = Decimal("1.000000")
                 obj.save()
                 if obj.cuenta_destino:
-                    from apps.bancos.services import registrar_movimiento_caja
-
-                    registrar_movimiento_caja(
-                        cuenta=obj.cuenta_destino,
-                        tipo="ENTRADA",
-                        monto=obj.monto,
-                        moneda=obj.moneda,
-                        tasa_cambio=obj.tasa_cambio,
-                        referencia=obj.factura.numero,
-                    )
+                    if obj.cuenta_destino.moneda == "USD" and obj.moneda == "VES":
+                        monto_caja  = obj.monto_usd
+                        moneda_caja = "USD"
+                        tasa_caja   = Decimal("1.000000")
+                    elif obj.cuenta_destino.moneda == "VES" and obj.moneda == "USD":
+                        monto_caja  = (obj.monto * obj.tasa_cambio).quantize(Decimal("0.01"))
+                        moneda_caja = "VES"
+                        tasa_caja   = obj.tasa_cambio
+                    else:  # misma moneda
+                        monto_caja  = obj.monto
+                        moneda_caja = obj.moneda
+                        tasa_caja   = obj.tasa_cambio
+                    try:
+                        registrar_movimiento_caja(
+                            cuenta=obj.cuenta_destino,
+                            tipo="ENTRADA",
+                            monto=monto_caja,
+                            moneda=moneda_caja,
+                            tasa_cambio=tasa_caja,
+                            referencia=obj.factura.numero,
+                        )
+                    except LacteOpsError as e:
+                        messages.warning(
+                            request,
+                            f"Cobro guardado, pero movimiento de caja falló: {e.message}",
+                        )
+                    except Exception as e:
+                        logger.error(
+                            "Error inesperado en movimiento caja para cobro %s: %s",
+                            obj, e, exc_info=True,
+                        )
+                        messages.warning(
+                            request,
+                            "Cobro guardado, pero movimiento de caja falló. Ver logs.",
+                        )
             else:
                 obj.save()
         formset.save_m2m()
@@ -186,10 +217,13 @@ class CobroAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         """
-        FIX: Calcula monto_usd con bimoneda al crear Cobros desde el formulario
+        Calcula monto_usd con bimoneda al crear Cobros desde el formulario
         independiente de CobroAdmin (punto de entrada distinto al inline).
         Si el cobro es en VES y no hay tasa BCV disponible, lo omite con error.
         Si hay cuenta_destino, registra el MovimientoCaja correspondiente.
+
+        FIX saldo: normaliza el monto a la moneda de la cuenta antes de llamar
+        a registrar_movimiento_caja. Errores de saldo se muestran como warning.
         """
         es_nuevo = obj._state.adding
         if es_nuevo:
@@ -213,14 +247,41 @@ class CobroAdmin(admin.ModelAdmin):
         if es_nuevo and obj.cuenta_destino:
             from apps.bancos.services import registrar_movimiento_caja
 
-            registrar_movimiento_caja(
-                cuenta=obj.cuenta_destino,
-                tipo="ENTRADA",
-                monto=obj.monto,
-                moneda=obj.moneda,
-                tasa_cambio=obj.tasa_cambio,
-                referencia=obj.factura.numero if obj.factura else "",
-            )
+            if obj.cuenta_destino.moneda == "USD" and obj.moneda == "VES":
+                monto_caja  = obj.monto_usd
+                moneda_caja = "USD"
+                tasa_caja   = Decimal("1.000000")
+            elif obj.cuenta_destino.moneda == "VES" and obj.moneda == "USD":
+                monto_caja  = (obj.monto * obj.tasa_cambio).quantize(Decimal("0.01"))
+                moneda_caja = "VES"
+                tasa_caja   = obj.tasa_cambio
+            else:  # misma moneda
+                monto_caja  = obj.monto
+                moneda_caja = obj.moneda
+                tasa_caja   = obj.tasa_cambio
+            try:
+                registrar_movimiento_caja(
+                    cuenta=obj.cuenta_destino,
+                    tipo="ENTRADA",
+                    monto=monto_caja,
+                    moneda=moneda_caja,
+                    tasa_cambio=tasa_caja,
+                    referencia=obj.factura.numero if obj.factura else "",
+                )
+            except LacteOpsError as e:
+                messages.warning(
+                    request,
+                    f"Cobro guardado, pero movimiento de caja falló: {e.message}",
+                )
+            except Exception as e:
+                logger.error(
+                    "Error inesperado en movimiento caja para cobro %s: %s",
+                    obj, e, exc_info=True,
+                )
+                messages.warning(
+                    request,
+                    "Cobro guardado, pero movimiento de caja falló. Ver logs.",
+                )
 
 
 # --- Sprint 2: Listas de precios y boton imprimir ---
