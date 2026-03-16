@@ -70,6 +70,12 @@ class Producto(AuditableModel):
         verbose_name = "Producto"
         verbose_name_plural = "Productos"
         ordering = ['codigo']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(stock_actual__gte=0),
+                name='chk_almacen_producto_stock_no_negativo',
+            ),
+        ]
 
     def __str__(self):
         return f"[{self.codigo}] {self.nombre}"

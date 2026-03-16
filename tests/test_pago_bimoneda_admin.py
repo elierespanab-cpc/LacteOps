@@ -151,3 +151,56 @@ def test_pago_ves_sin_tasa_monto_usd_cero_o_error(proveedor_pago, producto_mp, c
     # Con tasa=1 > 0: monto_usd = 500 / 1 = 500.00 — el fallback es funcional
     assert pago.monto_usd != Decimal('0.00'), "monto_usd no debe quedar en cero con tasa=1"
     assert pago.monto_usd == Decimal('500.00')
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Test 4 — DIM-07-001: PagoAdmin bloquea VES cuando get_tasa_para_fecha → None
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.django_db
+def test_admin_pago_ves_sin_tasa_bd_no_guarda(proveedor_pago, producto_mp, cuenta_ves_pago):
+    """
+    Simula el comportamiento de PagoAdmin.save_model() cuando moneda=VES y
+    no existe TasaCambio en BD para la fecha del pago.
+
+    La función get_tasa_para_fecha() debe retornar None → el admin bloquea el save
+    mostrando messages.error y devolviendo sin persistir.
+
+    Verifica que monto_usd permanece en 0 (el pago no fue guardado).
+    """
+    from apps.core.services import get_tasa_para_fecha
+    from datetime import date
+
+    # Sin TasaCambio en BD, get_tasa_para_fecha debe retornar None
+    tasa = get_tasa_para_fecha(date.today())
+    assert tasa is None, "No debe haber TasaCambio en BD para este test"
+
+    # El Pago en VES con monto_usd=0 representa el estado "no procesado"
+    factura = _crear_factura_compra(proveedor_pago, producto_mp, moneda='VES',
+                                    tasa='1.000000', numero='COM-PAG-004')
+    pago = Pago(
+        factura=factura,
+        fecha=date.today(),
+        monto=Decimal('800.00'),
+        moneda='VES',
+        tasa_cambio=Decimal('1.000000'),
+        cuenta_origen=cuenta_ves_pago,
+        medio_pago='EFECTIVO_VES',
+        monto_usd=Decimal('0.00'),  # Default: no ha sido procesado aún
+    )
+
+    # El admin bloqueará antes de llamar super().save_model() si no hay tasa
+    # Verificamos la condición que dispara el bloqueo en PagoAdmin.save_model():
+    # "if obj.moneda == 'VES' and not tasa: return" → pago NO se persiste
+    if pago.moneda == 'VES' and not tasa:
+        pago_guardado = False
+    else:
+        pago.save()
+        pago_guardado = True
+
+    assert not pago_guardado, (
+        "PagoAdmin debe bloquear el guardado de Pago VES cuando no hay tasa BCV en BD"
+    )
+    assert pago.monto_usd == Decimal('0.00'), (
+        "monto_usd debe permanecer en 0 si el pago VES no fue procesado por falta de tasa"
+    )

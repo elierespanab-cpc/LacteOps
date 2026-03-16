@@ -187,14 +187,13 @@ class FacturaVenta(AuditableModel):
                 'emitir (ya existen movimientos de inventario para esta factura)',
             )
 
-        # ── FASE 1: Control de crédito ────────────────────────────────────────
+        # ── FASE 1: Control de crédito (lectura pura, sin writes a BD) ──────────
         hoy = date.today()
 
-        # Asignar fecha_vencimiento en este momento (y persitir fecha si fue forzada)
+        # Calcular fecha_vencimiento en memoria (se persiste dentro del atomic)
         self.fecha_vencimiento = self.fecha + timedelta(days=self.cliente.dias_credito)
-        self.save(update_fields=['fecha', 'fecha_vencimiento', 'tasa_cambio'])
 
-        # Buscar facturas vencidas del mismo cliente
+        # Buscar facturas vencidas del mismo cliente (solo lectura)
         facturas_vencidas = []
         for fv in self.cliente.facturaventa_set.filter(estado='EMITIDA').exclude(pk=self.pk):
             if fv.fecha_vencimiento and fv.fecha_vencimiento < hoy:
@@ -217,8 +216,14 @@ class FacturaVenta(AuditableModel):
                     self.cliente, detalle, self.numero
                 )
 
-        # ── FASE 2: Asignación de precios y salidas de inventario ────────────────────
+        # ── FASE 2: Persistencia + salidas de inventario (todo atómico) ──────────
+        # El save() de fecha/tasa/vencimiento va DENTRO del atomic para que si
+        # alguna salida falla por stock insuficiente, el rollback revierta también
+        # los campos de cabecera — sin dejar la factura parcialmente modificada.
         with transaction.atomic():
+            # Persistir fecha, tasa y vencimiento atómicamente con los movimientos
+            self.save(update_fields=['fecha', 'fecha_vencimiento', 'tasa_cambio'])
+
             detalles = list(self.detalles.select_related('producto').all())
             for detalle in detalles:
                 detalle_lista = DetalleLista.objects.filter(
