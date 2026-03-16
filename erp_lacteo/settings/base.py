@@ -157,7 +157,7 @@ JAZZMIN_SETTINGS = {
         "core",
         "auth",
     ],
-    "hide_models": ["reportes.ReporteLink", "core.RespaldoBD"],
+    "hide_models": ["reportes.ReporteLink", "bancos.RespaldoBD"],
     "icons": {
         # ── Iconos de grupo (cabecera del menú colapsado) ─────────────────
         "ventas": "fas fa-shopping-bag",
