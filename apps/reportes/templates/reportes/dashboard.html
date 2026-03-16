@@ -1,176 +1,172 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Dashboard - LacteOps</title>
-  <style>
-    body { font-family: Arial, sans-serif; font-size: 13px; color: #222; margin: 20px; }
-    .header { border-bottom: 1px solid #ccc; margin-bottom: 16px; padding-bottom: 8px; }
-    .header h1 { margin: 0; font-size: 20px; }
-    .cards { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-    .card { border: 1px solid #ddd; padding: 10px; border-radius: 6px; min-width: 180px; background: #fafafa; }
-    .card h3 { margin: 0 0 6px 0; font-size: 13px; color: #555; }
-    .card .value { font-size: 18px; font-weight: bold; }
-    .section { margin-top: 16px; }
-    .badges { display: flex; gap: 8px; flex-wrap: wrap; }
-    .badge { padding: 4px 8px; border-radius: 12px; color: #fff; font-size: 11px; }
-    .badge.cxc { background: #d9534f; }
-    .badge.stock { background: #f0ad4e; }
-    .badge.tasa { background: #0275d8; }
-    .badge.prestamo { background: #f57c00; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
-    th { background: #f2f2f2; }
-    .text-right { text-align: right; }
-    .score-ok { color: #2e7d32; font-weight: bold; }
-    .score-mid { color: #f9a825; font-weight: bold; }
-    .score-bad { color: #c62828; font-weight: bold; }
-    .no-print { margin-bottom: 10px; }
-    @media print { .no-print { display: none; } }
-  </style>
-</head>
-<body>
-  <div class="no-print">
-    <a href="?exportar=1">Exportar Excel</a>
-  </div>
+{% extends "admin/base_site.html" %}
+{% load i18n %}
 
-  <div class="header">
-    <h1>Dashboard</h1>
-    {% if empresa %}
-      <div>{{ empresa.nombre_empresa }} - {{ empresa.rif }}</div>
-      <div>{{ empresa.direccion }}</div>
+{% block title %}Dashboard — {{ block.super }}{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .db-header-meta { font-size: 13px; margin: 2px 0 0 0; opacity: .8; }
+  .db-cards { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+  .db-card { border: 1px solid rgba(128,128,128,.3); padding: 12px 16px; border-radius: 6px; min-width: 160px; }
+  .db-card h4 { margin: 0 0 4px 0; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+  .db-card .db-value { font-size: 22px; font-weight: bold; }
+  .db-section { margin-top: 24px; }
+  .db-section h2 { font-size: 16px; margin-bottom: 8px; }
+  .db-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .db-badge { padding: 3px 10px; border-radius: 12px; color: #fff; font-size: 11px; font-weight: 600; }
+  .db-badge.cxc      { background: #d9534f; }
+  .db-badge.stock    { background: #f0ad4e; }
+  .db-badge.tasa     { background: #0275d8; }
+  .db-badge.prestamo { background: #f57c00; }
+  .score-ok  { color: #2e7d32; font-weight: bold; }
+  .score-mid { color: #f9a825; font-weight: bold; }
+  .score-bad { color: #c62828; font-weight: bold; }
+  @media print { .no-print { display: none; } }
+</style>
+{% endblock %}
+
+{% block content_title %}
+<h1>Dashboard</h1>
+{% if empresa %}
+  <p class="db-header-meta">{{ empresa.nombre_empresa }} — {{ empresa.rif }}<br>{{ empresa.direccion }}</p>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="no-print" style="margin-bottom:14px;">
+  <a href="?exportar=1" class="button">Exportar Excel</a>
+</div>
+
+{# ── Notificaciones ──────────────────────────────────────────────────────── #}
+<div class="db-section">
+  <h2>Notificaciones</h2>
+  <div class="db-badges">
+    <span class="db-badge cxc">CxC</span>
+    <span class="db-badge stock">Stock</span>
+    <span class="db-badge tasa">Tasa</span>
+    <span class="db-badge prestamo">Prestamo</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Tipo</th><th>Título</th><th>Mensaje</th>
+        <th>Entidad</th><th>Fecha</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for n in notificaciones %}
+        {% if n.id not in notif_leidas %}
+        <tr>
+          <td>
+            {% if n.tipo == 'CXC_VENCIENDO' %}<span class="db-badge cxc">CxC</span>{% endif %}
+            {% if n.tipo == 'STOCK_MINIMO' %}<span class="db-badge stock">Stock</span>{% endif %}
+            {% if n.tipo == 'TASA_NO_CARGADA' %}<span class="db-badge tasa">Tasa</span>{% endif %}
+            {% if n.tipo == 'PRESTAMO_VENCIENDO' %}<span class="db-badge prestamo">Prestamo</span>{% endif %}
+          </td>
+          <td>{{ n.titulo }}</td>
+          <td>{{ n.mensaje }}</td>
+          <td>{{ n.entidad }} {{ n.entidad_id }}</td>
+          <td>{{ n.fecha_referencia }}</td>
+          <td><button data-id="{{ n.id }}" class="btn-leida button">Marcar leída</button></td>
+        </tr>
+        {% endif %}
+      {% empty %}
+        <tr><td colspan="6">No hay notificaciones activas.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if es_admin %}
+{# ── Indicadores ─────────────────────────────────────────────────────────── #}
+<div class="db-section">
+  <h2>Indicadores</h2>
+  <div class="db-cards">
+    <div class="db-card"><h4>CCE</h4><div class="db-value">{{ cce.cce|default:"-" }}</div></div>
+    <div class="db-card"><h4>DSO</h4><div class="db-value">{{ cce.dso|default:"-" }}</div></div>
+    <div class="db-card"><h4>DIO</h4><div class="db-value">{{ cce.dio|default:"-" }}</div></div>
+    <div class="db-card"><h4>DPO</h4><div class="db-value">{{ cce.dpo|default:"-" }}</div></div>
+  </div>
+</div>
+
+{# ── Proyección de Caja ──────────────────────────────────────────────────── #}
+<div class="db-section">
+  <h2>Proyección de Caja — 7 días</h2>
+  <table>
+    <thead>
+      <tr><th>Fecha</th><th style="text-align:right;">Saldo</th></tr>
+    </thead>
+    <tbody>
+      {% for p in proyeccion %}
+        <tr><td>{{ p.fecha }}</td><td style="text-align:right;">{{ p.saldo }}</td></tr>
+      {% empty %}
+        <tr><td colspan="2">Sin datos</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ── Precio Ponderado Leche Cruda ────────────────────────────────────────── #}
+<div class="db-section">
+  <h2>Precio Ponderado Leche Cruda</h2>
+  <div class="db-card" style="display:inline-block;">
+    <div class="db-value">{{ precio_leche.precio|default:"-" }}</div>
+    {% if precio_leche.sin_datos_recientes %}
+      <div style="color:#c62828;font-size:12px;margin-top:4px;">Sin datos recientes</div>
     {% endif %}
   </div>
+</div>
 
-  <div class="section">
-    <h2>Notificaciones</h2>
-    <div class="badges">
-      <span class="badge cxc">CxC</span>
-      <span class="badge stock">Stock</span>
-      <span class="badge tasa">Tasa</span>
-      <span class="badge prestamo">Prestamo</span>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Tipo</th>
-          <th>Titulo</th>
-          <th>Mensaje</th>
-          <th>Entidad</th>
-          <th>Fecha</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for n in notificaciones %}
-  {% if n.id not in notif_leidas %}
-  <tr>
-    <td>
-      {% if n.tipo == 'CXC_VENCIENDO' %}<span class="badge cxc">CxC</span>{% endif %}
-      {% if n.tipo == 'STOCK_MINIMO' %}<span class="badge stock">Stock</span>{% endif %}
-      {% if n.tipo == 'TASA_NO_CARGADA' %}<span class="badge tasa">Tasa</span>{% endif %}
-      {% if n.tipo == 'PRESTAMO_VENCIENDO' %}<span class="badge prestamo">Prestamo</span>{% endif %}
-    </td>
-    <td>{{ n.titulo }}</td>
-    <td>{{ n.mensaje }}</td>
-    <td>{{ n.entidad }} {{ n.entidad_id }}</td>
-    <td>{{ n.fecha_referencia }}</td>
-    <td><button data-id="{{ n.id }}" class="btn-leida">Marcar leida</button></td>
-  </tr>
-  {% endif %}
-{% empty %}
-<tr><td colspan="6">No hay notificaciones activas.</td></tr>
-{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  {% if es_admin %}
-  <div class="section">
-    <h2>Indicadores</h2>
-    <div class="cards">
-      <div class="card"><h3>CCE</h3><div class="value">{{ cce.cce|default:"-" }}</div></div>
-      <div class="card"><h3>DSO</h3><div class="value">{{ cce.dso|default:"-" }}</div></div>
-      <div class="card"><h3>DIO</h3><div class="value">{{ cce.dio|default:"-" }}</div></div>
-      <div class="card"><h3>DPO</h3><div class="value">{{ cce.dpo|default:"-" }}</div></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>Proyeccion de Caja 7 dias</h2>
-    <table>
-      <thead>
-        <tr><th>Fecha</th><th class="text-right">Saldo</th></tr>
-      </thead>
-      <tbody>
-        {% for p in proyeccion %}
-        <tr><td>{{ p.fecha }}</td><td class="text-right">{{ p.saldo }}</td></tr>
-        {% empty %}
-        <tr><td colspan="2">Sin datos</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="section">
-    <h2>Precio Ponderado Leche Cruda</h2>
-    <div class="card">
-      <div class="value">{{ precio_leche.precio|default:"-" }}</div>
-      {% if precio_leche.sin_datos_recientes %}
-        <div style="color: #c62828;">Sin datos recientes</div>
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>Score Riesgo CxC</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Cliente</th>
-          <th class="text-right">Score</th>
-          <th class="text-right">Puntualidad</th>
-          <th class="text-right">Solvencia</th>
-          <th class="text-right">Tendencia</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for s in scores %}
+{# ── Score Riesgo CxC ────────────────────────────────────────────────────── #}
+<div class="db-section">
+  <h2>Score Riesgo CxC</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Cliente</th>
+        <th style="text-align:right;">Score</th>
+        <th style="text-align:right;">Puntualidad</th>
+        <th style="text-align:right;">Solvencia</th>
+        <th style="text-align:right;">Tendencia</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in scores %}
         <tr>
           <td>{{ s.cliente }}</td>
-          <td class="text-right">
-            {% if s.score > 70 %}<span class="score-ok">{{ s.score }}</span>{% elif s.score >= 40 %}<span class="score-mid">{{ s.score }}</span>{% else %}<span class="score-bad">{{ s.score }}</span>{% endif %}
+          <td style="text-align:right;">
+            {% if s.score > 70 %}<span class="score-ok">{{ s.score }}</span>
+            {% elif s.score >= 40 %}<span class="score-mid">{{ s.score }}</span>
+            {% else %}<span class="score-bad">{{ s.score }}</span>{% endif %}
           </td>
-          <td class="text-right">{{ s.puntualidad }}</td>
-          <td class="text-right">{{ s.solvencia }}</td>
-          <td class="text-right">{{ s.tendencia }}</td>
+          <td style="text-align:right;">{{ s.puntualidad }}</td>
+          <td style="text-align:right;">{{ s.solvencia }}</td>
+          <td style="text-align:right;">{{ s.tendencia }}</td>
         </tr>
-        {% empty %}
+      {% empty %}
         <tr><td colspan="5">Sin datos</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 
-  <script>
-    function getCookie(name) {
-      const value = `; ${document.cookie}`;
-      const parts = value.split(`; ${name}=`);
-      if (parts.length === 2) return parts.pop().split(';').shift();
-    }
-    document.querySelectorAll('.btn-leida').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-id');
-        await fetch(`/reportes/notificacion/${id}/leida/`, {
-          method: 'POST',
-          headers: { 'X-CSRFToken': getCookie('csrftoken') || '' },
-        });
-        btn.closest('tr').remove();
+<script>
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+  }
+  document.querySelectorAll('.btn-leida').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-id');
+      await fetch(`/reportes/notificacion/${id}/leida/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') || '' },
       });
+      btn.closest('tr').remove();
     });
-  </script>
-</body>
-</html>
-
-
+  });
+</script>
+{% endblock %}

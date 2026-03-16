@@ -142,7 +142,7 @@ JAZZMIN_SETTINGS = {
     "site_brand": "LacteOps",
     "welcome_sign": "Bienvenido a LacteOps",
     "theme": "default",
-    "navigation_expanded": False,
+    "navigation_expanded": True,
     "show_ui_builder": False,
     "custom_index": "reportes:dashboard",
     "collapsible_nav": True,
@@ -205,7 +205,7 @@ JAZZMIN_SETTINGS = {
                 "icon": "fas fa-file-invoice-dollar",
             },
             {
-                "name": "ProducciÃ³n",
+                "name": "Producción",
                 "url": "reportes:produccion",
                 "icon": "fas fa-industry",
             },

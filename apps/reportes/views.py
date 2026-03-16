@@ -1124,6 +1124,8 @@ def dashboard(request):
             parametros=parametros,
         )
 
+    from django.contrib import admin as django_admin
+    ctx.update(django_admin.site.each_context(request))
     return render(request, "reportes/dashboard.html", ctx)
 
 
