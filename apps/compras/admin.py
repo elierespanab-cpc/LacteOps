@@ -94,10 +94,16 @@ class FacturaCompraAdmin(admin.ModelAdmin):
 
     def save_formset(self, request, form, formset, change):
         """
-        FIX C2: Calcula monto_usd con bimoneda al crear Pagos desde el inline.
+        Calcula monto_usd con bimoneda al crear Pagos desde el inline.
         Si el pago es en VES y no hay tasa BCV disponible, lo omite con error.
         Si hay cuenta_origen, registra el MovimientoCaja correspondiente.
+
+        FIX saldo: normaliza el monto a la moneda de la cuenta antes de llamar
+        a registrar_movimiento_caja, evitando la comparación cruzada USD vs VES
+        que producía SaldoInsuficienteError cuando la cuenta es USD y el pago VES.
         """
+        from apps.bancos.services import registrar_movimiento_caja
+
         instances = formset.save(commit=False)
         for obj in instances:
             if isinstance(obj, Pago) and obj._state.adding:
@@ -117,16 +123,44 @@ class FacturaCompraAdmin(admin.ModelAdmin):
                     obj.tasa_cambio = Decimal("1.000000")
                 obj.save()
                 if obj.cuenta_origen:
-                    from apps.bancos.services import registrar_movimiento_caja
-
-                    registrar_movimiento_caja(
-                        cuenta=obj.cuenta_origen,
-                        tipo="SALIDA",
-                        monto=obj.monto,
-                        moneda=obj.moneda,
-                        tasa_cambio=obj.tasa_cambio,
-                        referencia=obj.factura.numero,
-                    )
+                    # Normalizar monto a la moneda nativa de la cuenta para que
+                    # registrar_movimiento_caja compare y actualice saldo_actual
+                    # en la misma unidad que lo almacena la cuenta.
+                    if obj.cuenta_origen.moneda == "USD" and obj.moneda == "VES":
+                        monto_caja  = obj.monto_usd
+                        moneda_caja = "USD"
+                        tasa_caja   = Decimal("1.000000")
+                    elif obj.cuenta_origen.moneda == "VES" and obj.moneda == "USD":
+                        monto_caja  = (obj.monto * obj.tasa_cambio).quantize(Decimal("0.01"))
+                        moneda_caja = "VES"
+                        tasa_caja   = obj.tasa_cambio
+                    else:  # misma moneda
+                        monto_caja  = obj.monto
+                        moneda_caja = obj.moneda
+                        tasa_caja   = obj.tasa_cambio
+                    try:
+                        registrar_movimiento_caja(
+                            cuenta=obj.cuenta_origen,
+                            tipo="SALIDA",
+                            monto=monto_caja,
+                            moneda=moneda_caja,
+                            tasa_cambio=tasa_caja,
+                            referencia=obj.factura.numero,
+                        )
+                    except LacteOpsError as e:
+                        messages.warning(
+                            request,
+                            f"Pago guardado, pero movimiento de caja falló: {e.message}",
+                        )
+                    except Exception as e:
+                        logger.error(
+                            "Error inesperado en movimiento caja para pago %s: %s",
+                            obj, e, exc_info=True,
+                        )
+                        messages.warning(
+                            request,
+                            f"Pago guardado, pero movimiento de caja falló. Ver logs.",
+                        )
             else:
                 obj.save()
         formset.save_m2m()
@@ -176,10 +210,14 @@ class PagoAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         """
-        FIX: Calcula monto_usd con bimoneda al crear Pagos desde el formulario
+        Calcula monto_usd con bimoneda al crear Pagos desde el formulario
         independiente de PagoAdmin (punto de entrada distinto al inline).
         Si el pago es en VES y no hay tasa BCV disponible, lo omite con error.
         Si hay cuenta_origen, registra el MovimientoCaja correspondiente.
+
+        FIX saldo: normaliza el monto a la moneda de la cuenta antes de llamar
+        a registrar_movimiento_caja. Errores de saldo se muestran como warning,
+        no como 500 — el Pago queda guardado para registro contable.
         """
         es_nuevo = obj._state.adding
         if es_nuevo:
@@ -203,14 +241,41 @@ class PagoAdmin(admin.ModelAdmin):
         if es_nuevo and obj.cuenta_origen:
             from apps.bancos.services import registrar_movimiento_caja
 
-            registrar_movimiento_caja(
-                cuenta=obj.cuenta_origen,
-                tipo="SALIDA",
-                monto=obj.monto,
-                moneda=obj.moneda,
-                tasa_cambio=obj.tasa_cambio,
-                referencia=obj.factura.numero if obj.factura else "",
-            )
+            if obj.cuenta_origen.moneda == "USD" and obj.moneda == "VES":
+                monto_caja  = obj.monto_usd
+                moneda_caja = "USD"
+                tasa_caja   = Decimal("1.000000")
+            elif obj.cuenta_origen.moneda == "VES" and obj.moneda == "USD":
+                monto_caja  = (obj.monto * obj.tasa_cambio).quantize(Decimal("0.01"))
+                moneda_caja = "VES"
+                tasa_caja   = obj.tasa_cambio
+            else:  # misma moneda
+                monto_caja  = obj.monto
+                moneda_caja = obj.moneda
+                tasa_caja   = obj.tasa_cambio
+            try:
+                registrar_movimiento_caja(
+                    cuenta=obj.cuenta_origen,
+                    tipo="SALIDA",
+                    monto=monto_caja,
+                    moneda=moneda_caja,
+                    tasa_cambio=tasa_caja,
+                    referencia=obj.factura.numero if obj.factura else "",
+                )
+            except LacteOpsError as e:
+                messages.warning(
+                    request,
+                    f"Pago guardado, pero movimiento de caja falló: {e.message}",
+                )
+            except Exception as e:
+                logger.error(
+                    "Error inesperado en movimiento caja para pago %s: %s",
+                    obj, e, exc_info=True,
+                )
+                messages.warning(
+                    request,
+                    "Pago guardado, pero movimiento de caja falló. Ver logs.",
+                )
 
 
 _gasto_admin = admin.site._registry.get(GastoServicio)
