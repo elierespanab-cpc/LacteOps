@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.urls import include, path
 from django.views.generic import RedirectView
 
-from apps.core.admin import vista_respaldo_bd, api_tasa_fecha
+from apps.core.admin import vista_respaldo_bd, api_tasa_fecha, api_precio_lista
 
 urlpatterns = [
     path(
@@ -22,4 +22,5 @@ urlpatterns = [
     path("socios/", include("apps.socios.urls")),
     path("respaldo-bd/", login_required(vista_respaldo_bd), name="respaldo_bd"),
     path("api/tasa/", api_tasa_fecha, name="api_tasa"),
+    path("api/precio/", login_required(api_precio_lista), name="api_precio"),
 ]

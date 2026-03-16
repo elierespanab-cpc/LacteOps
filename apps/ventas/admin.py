@@ -34,7 +34,10 @@ class ClienteAdmin(admin.ModelAdmin):
 class DetalleFacturaVentaInline(admin.TabularInline):
     model = DetalleFacturaVenta
     extra = 3
-    readonly_fields = ("subtotal",)
+    # precio_unitario es editable=False en el modelo; se incluye aquí como readonly
+    # para que aparezca en la grilla y el JS pueda auto-llenarlo desde la lista de precios.
+    fields = ("producto", "cantidad", "precio_unitario", "subtotal")
+    readonly_fields = ("precio_unitario", "subtotal")
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "producto":
@@ -65,8 +68,14 @@ class FacturaVentaAdmin(admin.ModelAdmin):
     actions = ["emitir_facturas", "marcar_cobradas"]
 
     class Media:
-        # tasa_auto_pago.js también carga para el CobroInline dentro de FacturaVenta
-        js = ("admin/js/calcular_subtotal.js", "admin/js/tasa_auto_pago.js")
+        # calcular_subtotal.js  → subtotal en tiempo real (compras y ventas)
+        # tasa_auto_pago.js     → tasa BCV en CobroInline
+        # precio_auto_venta.js  → precio_unitario desde lista al seleccionar producto
+        js = (
+            "admin/js/calcular_subtotal.js",
+            "admin/js/tasa_auto_pago.js",
+            "admin/js/precio_auto_venta.js",
+        )
         css = {"all": ("admin/css/ocultar_campo.css",)}
 
     def get_readonly_fields(self, request, obj=None):

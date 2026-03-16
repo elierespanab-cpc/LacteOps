@@ -183,3 +183,31 @@ def api_tasa_fecha(request):
     obj = TasaCambio.objects.filter(fecha__gte=fecha).order_by("fecha").first()
     tasa = str(obj.tasa) if obj else "1.000000"
     return JsonResponse({"tasa": tasa})
+
+
+def api_precio_lista(request):
+    """
+    GET /api/precio/?producto_id=X&lista_id=Y
+    Devuelve el precio aprobado de un producto en una lista de precios.
+    Usado por precio_auto_venta.js para auto-rellenar precio_unitario en el inline.
+    """
+    from django.http import JsonResponse
+    from apps.ventas.models import DetalleLista
+
+    producto_id = request.GET.get("producto_id", "").strip()
+    lista_id    = request.GET.get("lista_id", "").strip()
+
+    if not producto_id or not lista_id:
+        return JsonResponse({"precio": None})
+
+    try:
+        detalle = DetalleLista.objects.get(
+            lista_id=lista_id,
+            producto_id=producto_id,
+            aprobado=True,
+        )
+        return JsonResponse({"precio": str(detalle.precio)})
+    except DetalleLista.DoesNotExist:
+        return JsonResponse({"precio": None})
+    except Exception:
+        return JsonResponse({"precio": None})
