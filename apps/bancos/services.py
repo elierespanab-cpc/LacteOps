@@ -52,6 +52,92 @@ def _calcular_monto_usd(monto: Decimal, moneda: str, tasa_cambio: Decimal) -> De
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Utilidades bimoneda (DIM-04-001 / DIM-05-001)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def calcular_bimoneda(monto: Decimal, moneda: str, fecha=None):
+    """
+    Calcula monto_usd y tasa_cambio para un cobro o pago bimoneda.
+
+    Regla invariante:
+      USD → monto_usd = monto,            tasa_cambio = 1.000000
+      VES → monto_usd = monto / tasa_BCV, tasa_cambio = tasa_BCV
+
+    Args:
+        monto  (Decimal): Monto del cobro/pago.
+        moneda (str):     'USD' o 'VES'.
+        fecha  (date):    Fecha del documento; usa date.today() si None.
+
+    Returns:
+        tuple (monto_usd: Decimal, tasa_cambio: Decimal)
+
+    Raises:
+        LacteOpsError: Si moneda == 'VES' y no hay TasaCambio en BD para la fecha.
+    """
+    from datetime import date as _date
+    from apps.core.services import get_tasa_para_fecha
+    from apps.core.exceptions import LacteOpsError
+
+    if fecha is None:
+        fecha = _date.today()
+
+    monto = Decimal(str(monto))
+
+    if moneda == 'USD':
+        return monto, Decimal('1.000000')
+
+    # VES: requiere tasa BCV en BD
+    tasa_obj = get_tasa_para_fecha(fecha)
+    if not tasa_obj:
+        raise LacteOpsError(
+            f'Sin tasa BCV para {fecha}. Registre la tasa antes de guardar.'
+        )
+    tasa_val = Decimal(str(tasa_obj.tasa))
+    monto_usd = (monto / tasa_val).quantize(Decimal('0.01'))
+    return monto_usd, tasa_val
+
+
+def normalizar_monto_para_cuenta(
+    monto: Decimal,
+    moneda: str,
+    tasa_cambio: Decimal,
+    cuenta,
+):
+    """
+    Normaliza (monto, moneda, tasa_cambio) a la moneda nativa de la cuenta.
+
+    registrar_movimiento_caja() compara saldo_actual contra monto en la misma
+    unidad que la cuenta. Sin normalización se produciría SaldoInsuficienteError
+    falso (p. ej. saldo USD 500 vs monto VES 800).
+
+    Casos:
+      cuenta USD + transacción VES → convierte VES → USD (monto / tasa_cambio)
+      cuenta VES + transacción USD → convierte USD → VES (monto * tasa_cambio)
+      misma moneda                 → pasa directamente sin conversión
+
+    Args:
+        monto       (Decimal):          Monto de la transacción.
+        moneda      (str):              Moneda de la transacción ('USD' o 'VES').
+        tasa_cambio (Decimal):          Tasa BCV activa.
+        cuenta      (CuentaBancaria):   Cuenta afectada.
+
+    Returns:
+        tuple (monto_caja: Decimal, moneda_caja: str, tasa_caja: Decimal)
+    """
+    monto = Decimal(str(monto))
+    tasa_cambio = Decimal(str(tasa_cambio))
+
+    if cuenta.moneda == 'USD' and moneda == 'VES':
+        # Pago VES a cuenta USD: normalizar a USD
+        return (monto / tasa_cambio).quantize(Decimal('0.01')), 'USD', Decimal('1.000000')
+    if cuenta.moneda == 'VES' and moneda == 'USD':
+        # Pago USD a cuenta VES: normalizar a VES
+        return (monto * tasa_cambio).quantize(Decimal('0.01')), 'VES', tasa_cambio
+    # Misma moneda: pasa directamente
+    return monto, moneda, tasa_cambio
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Función principal: único punto de entrada para movimientos de caja
 # ─────────────────────────────────────────────────────────────────────────────
 

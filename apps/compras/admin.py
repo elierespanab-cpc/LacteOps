@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
 from datetime import date
-from decimal import Decimal
 
 from django.contrib import admin, messages
 
@@ -14,7 +13,6 @@ from apps.compras.models import (
 )
 from apps.almacen.models import Producto
 from apps.core.exceptions import LacteOpsError
-from apps.core.services import get_tasa_para_fecha
 
 logger = logging.getLogger(__name__)
 
@@ -97,47 +95,28 @@ class FacturaCompraAdmin(admin.ModelAdmin):
         Calcula monto_usd con bimoneda al crear Pagos desde el inline.
         Si el pago es en VES y no hay tasa BCV disponible, lo omite con error.
         Si hay cuenta_origen, registra el MovimientoCaja correspondiente.
-
-        FIX saldo: normaliza el monto a la moneda de la cuenta antes de llamar
-        a registrar_movimiento_caja, evitando la comparación cruzada USD vs VES
-        que producía SaldoInsuficienteError cuando la cuenta es USD y el pago VES.
         """
-        from apps.bancos.services import registrar_movimiento_caja
+        from apps.bancos.services import (
+            calcular_bimoneda,
+            normalizar_monto_para_cuenta,
+            registrar_movimiento_caja,
+        )
 
         instances = formset.save(commit=False)
         for obj in instances:
             if isinstance(obj, Pago) and obj._state.adding:
-                tasa = get_tasa_para_fecha(obj.fecha or date.today())
-                if obj.moneda == "VES" and not tasa:
-                    messages.error(
-                        request,
-                        f"Sin tasa BCV para {obj.fecha}. Pago no guardado.",
+                try:
+                    obj.monto_usd, obj.tasa_cambio = calcular_bimoneda(
+                        obj.monto, obj.moneda, obj.fecha or date.today()
                     )
+                except LacteOpsError as e:
+                    messages.error(request, e.message)
                     continue
-                tasa_val = tasa.tasa if tasa else Decimal("1.000000")
-                if obj.moneda == "VES":
-                    obj.monto_usd = (obj.monto / tasa_val).quantize(Decimal("0.01"))
-                    obj.tasa_cambio = tasa_val
-                else:
-                    obj.monto_usd = obj.monto
-                    obj.tasa_cambio = Decimal("1.000000")
                 obj.save()
                 if obj.cuenta_origen:
-                    # Normalizar monto a la moneda nativa de la cuenta para que
-                    # registrar_movimiento_caja compare y actualice saldo_actual
-                    # en la misma unidad que lo almacena la cuenta.
-                    if obj.cuenta_origen.moneda == "USD" and obj.moneda == "VES":
-                        monto_caja  = obj.monto_usd
-                        moneda_caja = "USD"
-                        tasa_caja   = Decimal("1.000000")
-                    elif obj.cuenta_origen.moneda == "VES" and obj.moneda == "USD":
-                        monto_caja  = (obj.monto * obj.tasa_cambio).quantize(Decimal("0.01"))
-                        moneda_caja = "VES"
-                        tasa_caja   = obj.tasa_cambio
-                    else:  # misma moneda
-                        monto_caja  = obj.monto
-                        moneda_caja = obj.moneda
-                        tasa_caja   = obj.tasa_cambio
+                    monto_caja, moneda_caja, tasa_caja = normalizar_monto_para_cuenta(
+                        obj.monto, obj.moneda, obj.tasa_cambio, obj.cuenta_origen
+                    )
                     try:
                         registrar_movimiento_caja(
                             cuenta=obj.cuenta_origen,
@@ -159,7 +138,7 @@ class FacturaCompraAdmin(admin.ModelAdmin):
                         )
                         messages.warning(
                             request,
-                            f"Pago guardado, pero movimiento de caja falló. Ver logs.",
+                            "Pago guardado, pero movimiento de caja falló. Ver logs.",
                         )
             else:
                 obj.save()
@@ -214,45 +193,29 @@ class PagoAdmin(admin.ModelAdmin):
         independiente de PagoAdmin (punto de entrada distinto al inline).
         Si el pago es en VES y no hay tasa BCV disponible, lo omite con error.
         Si hay cuenta_origen, registra el MovimientoCaja correspondiente.
-
-        FIX saldo: normaliza el monto a la moneda de la cuenta antes de llamar
-        a registrar_movimiento_caja. Errores de saldo se muestran como warning,
-        no como 500 — el Pago queda guardado para registro contable.
         """
+        from apps.bancos.services import (
+            calcular_bimoneda,
+            normalizar_monto_para_cuenta,
+            registrar_movimiento_caja,
+        )
+
         es_nuevo = obj._state.adding
         if es_nuevo:
-            tasa = get_tasa_para_fecha(obj.fecha or date.today())
-            if obj.moneda == "VES" and not tasa:
-                messages.error(
-                    request,
-                    f"Sin tasa BCV para {obj.fecha}. Pago no guardado.",
+            try:
+                obj.monto_usd, obj.tasa_cambio = calcular_bimoneda(
+                    obj.monto, obj.moneda, obj.fecha or date.today()
                 )
+            except LacteOpsError as e:
+                messages.error(request, e.message)
                 return
-            tasa_val = tasa.tasa if tasa else Decimal("1.000000")
-            if obj.moneda == "VES":
-                obj.monto_usd = (obj.monto / tasa_val).quantize(Decimal("0.01"))
-                obj.tasa_cambio = tasa_val
-            else:
-                obj.monto_usd = obj.monto
-                obj.tasa_cambio = Decimal("1.000000")
 
         super().save_model(request, obj, form, change)
 
         if es_nuevo and obj.cuenta_origen:
-            from apps.bancos.services import registrar_movimiento_caja
-
-            if obj.cuenta_origen.moneda == "USD" and obj.moneda == "VES":
-                monto_caja  = obj.monto_usd
-                moneda_caja = "USD"
-                tasa_caja   = Decimal("1.000000")
-            elif obj.cuenta_origen.moneda == "VES" and obj.moneda == "USD":
-                monto_caja  = (obj.monto * obj.tasa_cambio).quantize(Decimal("0.01"))
-                moneda_caja = "VES"
-                tasa_caja   = obj.tasa_cambio
-            else:  # misma moneda
-                monto_caja  = obj.monto
-                moneda_caja = obj.moneda
-                tasa_caja   = obj.tasa_cambio
+            monto_caja, moneda_caja, tasa_caja = normalizar_monto_para_cuenta(
+                obj.monto, obj.moneda, obj.tasa_cambio, obj.cuenta_origen
+            )
             try:
                 registrar_movimiento_caja(
                     cuenta=obj.cuenta_origen,
