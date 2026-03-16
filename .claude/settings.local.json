@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python manage.py check)"
+      "Bash(python manage.py check)",
+      "Bash(source /c/Users/elier/Documents/Desarollos/LacteOps/venv/Scripts/activate)",
+      "Bash(python -m pytest tests/ -v --tb=short)"
     ]
   }
 }
