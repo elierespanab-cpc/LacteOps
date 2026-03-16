@@ -34,7 +34,7 @@
         {% regroup resultados by factura.cliente as clientes_group %}
         {% for grupo in clientes_group %}
             <tr class="group-header">
-                <td colspan="11">{{ grupo.grouper.razon_social }} (RIF: {{ grupo.grouper.rif }})</td>
+                <td colspan="11">{{ grupo.grouper.nombre }} (RIF: {{ grupo.grouper.rif }})</td>
             </tr>
             {% for item in grupo.list %}
             <tr>
