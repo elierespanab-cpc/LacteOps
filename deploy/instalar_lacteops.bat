@@ -44,8 +44,20 @@ set DB_NAME=lacteops
 echo.
 
 :: ── Determinar ruta de instalacion ───────────────────────────
-echo [3/8] Copiando archivos del proyecto...
+:: ── Clonar proyecto desde GitHub ─────────────────────────────
+echo [3/8] Descargando proyecto desde GitHub...
 set INSTALL_DIR=C:\LacteOps
+set GITHUB_REPO=https://github.com/elierespanab-cpc/LacteOps.git
+ 
+:: Verificar que Git este instalado
+git --version >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    color 0C
+    echo ERROR: Git no esta instalado o no esta en el PATH.
+    echo Descargue Git desde https://git-scm.com e instalelo.
+    pause
+    exit /b 1
+)
 
 if exist "%INSTALL_DIR%" (
     echo       La carpeta %INSTALL_DIR% ya existe.
@@ -55,12 +67,21 @@ if exist "%INSTALL_DIR%" (
         pause
         exit /b 0
     )
+    rmdir /s /q "%INSTALL_DIR%"
 )
-
-:: Copiar todo el proyecto (excepto venv, __pycache__, .git, db.sqlite3)
-robocopy "%~dp0.." "%INSTALL_DIR%" /E /XD venv __pycache__ .git node_modules .claude /XF db.sqlite3 .env *.pyc >nul
-echo       Proyecto copiado a %INSTALL_DIR%
+ 
+echo       Clonando repositorio... (requiere internet)
+git clone %GITHUB_REPO% "%INSTALL_DIR%"
+if %ERRORLEVEL% NEQ 0 (
+    color 0C
+    echo ERROR: No se pudo clonar el repositorio.
+    echo Verifica que la URL sea correcta y tengas acceso a internet.
+    pause
+    exit /b 1
+)
+echo       Proyecto descargado en %INSTALL_DIR%
 echo.
+
 
 :: ── Crear entorno virtual ────────────────────────────────────
 echo [4/8] Creando entorno virtual...
