@@ -7,18 +7,18 @@
         {% if fecha_desde %}Desde: {{ fecha_desde }} {% endif %}
         {% if fecha_hasta %}Hasta: {{ fecha_hasta }} {% endif %}
     </small>
-{% endblock %}
+{% endblock report_title %}
 
-{% block content %}
+{% block report_content %}
 <div class="no-print filters">
     <form method="get">
         <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
         <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}"></label>
         <br>
-        <label>Clientes: 
+        <label>Clientes:
             <select name="cliente" multiple>
                 {% for c in clientes %}
-                <option value="{{ c.id }}" {% if c.id|stringformat:"i" in request.GET|default:'' %}selected{% endif %}>{{ c.razon_social }}</option>
+                <option value="{{ c.id }}">{{ c.nombre }}</option>
                 {% endfor %}
             </select>
         </label>
@@ -54,7 +54,7 @@
         {% for grupo in clientes_group %}
             {% if agrupar_por_cliente %}
             <tr class="group-header">
-                <td colspan="10">Cliente: {{ grupo.grouper.razon_social }} (RIF: {{ grupo.grouper.rif }})</td>
+                <td colspan="10">Cliente: {{ grupo.grouper.nombre }} (RIF: {{ grupo.grouper.rif }})</td>
             </tr>
             {% endif %}
             
@@ -62,7 +62,7 @@
             <tr>
                 <td>{{ d.factura.numero }}</td>
                 <td>{{ d.factura.fecha|date:"Y-m-d" }}</td>
-                <td>{{ d.factura.cliente.razon_social }}</td>
+                <td>{{ d.factura.cliente.nombre }}</td>
                 <td>{{ d.producto.codigo }} - {{ d.producto.nombre }}</td>
                 <td class="text-right">{{ d.cantidad|intcomma }}</td>
                 <td class="text-right">{{ d.precio_unitario|intcomma }}</td>
@@ -92,4 +92,4 @@
         {% endfor %}
     </tbody>
 </table>
-{% endblock %}
+{% endblock report_content %}

@@ -1,20 +1,23 @@
-﻿<!doctype html>
+{% load static %}<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <title>Factura de Venta</title>
   <style>
     body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 20px; }
-    .header { display: flex; justify-content: space-between; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
-    .empresa h1 { margin: 0; font-size: 18px; }
-    .doc h2 { margin: 0; font-size: 16px; text-align: right; }
-    .meta { margin-top: 8px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a237e; padding-bottom: 10px; margin-bottom: 10px; }
+    .empresa { min-width: 200px; }
+    .logo-empresa { max-height: 65px; width: auto; display: block; margin-bottom: 4px; }
+    .empresa-info { color: #444; line-height: 1.5; }
+    .doc { text-align: right; }
+    .doc h2 { margin: 0 0 4px 0; font-size: 16px; color: #1a237e; }
+    .meta { margin-top: 8px; background: #f7f7f7; padding: 6px 8px; border-radius: 3px; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     th, td { border: 1px solid #ccc; padding: 6px; }
-    th { background: #f3f3f3; text-align: left; }
+    th { background: #e8eaf6; color: #1a237e; text-align: left; }
     .num { text-align: right; }
-    .total { margin-top: 8px; font-weight: bold; text-align: right; }
-    .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; }
+    .total { margin-top: 8px; font-weight: bold; text-align: right; font-size: 13px; }
+    .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 11px; color: #555; }
     .firma { margin-top: 24px; }
     .no-print { margin-bottom: 10px; }
     @media print {
@@ -29,32 +32,30 @@
   </div>
   <div class="header">
     <div class="empresa">
+      <img src="{% static 'img/logo.png' %}" alt="Lácteos El Cristo" class="logo-empresa">
       {% if empresa %}
-        <h1>{{ empresa.nombre_empresa }}</h1>
-        <div>RIF: {{ empresa.rif }}</div>
-        <div>{{ empresa.direccion }}</div>
-        <div>Tel: {{ empresa.telefono }}</div>
-        {% if empresa.email %}<div>Email: {{ empresa.email }}</div>{% endif %}
-      {% else %}
-        <h1>LacteOps</h1>
-        <div>Empresa no configurada</div>
+        <div class="empresa-info">
+          <div>RIF: {{ empresa.rif }}</div>
+          <div>{{ empresa.direccion }}</div>
+          <div>Tel: {{ empresa.telefono }}</div>
+          {% if empresa.email %}<div>{{ empresa.email }}</div>{% endif %}
+        </div>
       {% endif %}
     </div>
     <div class="doc">
       <h2>Factura de Venta</h2>
-      <div>Numero: {{ obj.numero }}</div>
+      <div>N°: {{ obj.numero }}</div>
       <div>Fecha: {{ obj.fecha }}</div>
     </div>
   </div>
   <div class="meta">
-    <div>Cliente: {{ obj.cliente }}</div>
-    <div>Estado: {{ obj.estado }}</div>
-    <div>Moneda: {{ obj.moneda }}</div>
+    <div>Cliente: <strong>{{ obj.cliente }}</strong></div>
+    <div>Estado: {{ obj.estado }} &nbsp;|&nbsp; Moneda: {{ obj.moneda }}</div>
   </div>
   <table>
     <thead>
       <tr>
-        <th>Codigo</th>
+        <th>Código</th>
         <th>Producto</th>
         <th class="num">Cantidad</th>
         <th class="num">Precio</th>
@@ -71,18 +72,14 @@
         <td class="num">{{ d.subtotal }}</td>
       </tr>
       {% empty %}
-      <tr>
-        <td colspan="5">Sin detalles</td>
-      </tr>
+      <tr><td colspan="5">Sin detalles</td></tr>
       {% endfor %}
     </tbody>
   </table>
   <div class="total">Total: {{ obj.total }}</div>
-  {% if obj.notas %}<div class="notas">Notas: {{ obj.notas }}</div>{% endif %}
+  {% if obj.notas %}<div style="margin-top:6px;">Notas: {{ obj.notas }}</div>{% endif %}
   <div class="footer">
-    {% if empresa and empresa.pie_documento %}
-      <div>{{ empresa.pie_documento }}</div>
-    {% endif %}
+    {% if empresa and empresa.pie_documento %}<div>{{ empresa.pie_documento }}</div>{% endif %}
     <div class="firma">Firma y nombre: ____________________________</div>
   </div>
 </body>

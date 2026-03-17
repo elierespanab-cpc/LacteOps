@@ -139,7 +139,11 @@ LOGGING = {
 JAZZMIN_SETTINGS = {
     "site_title": "LacteOps",
     "site_header": "LacteOps ERP",
-    "site_brand": "LacteOps",
+    "site_brand": "",
+    "site_logo": "img/logo.png",
+    "login_logo": "img/logo.png",
+    "site_logo_classes": "img-fluid",
+    "custom_css": "css/lacteops.css",
     "welcome_sign": "Bienvenido a LacteOps",
     "theme": "default",
     "navigation_expanded": False,

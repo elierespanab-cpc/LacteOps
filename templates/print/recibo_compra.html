@@ -1,18 +1,25 @@
-﻿<!doctype html>
+{% load static %}<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Recibo de Compra</title>
+  <title>{% if obj.es_consolidado %}Voucher de Pago Consolidado{% else %}Recibo de Compra{% endif %}</title>
   <style>
     body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 20px; }
-    .header { display: flex; justify-content: space-between; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
-    .empresa h1 { margin: 0; font-size: 18px; }
-    .doc h2 { margin: 0; font-size: 16px; text-align: right; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a237e; padding-bottom: 10px; margin-bottom: 10px; }
+    .empresa { min-width: 200px; }
+    .logo-empresa { max-height: 65px; width: auto; display: block; margin-bottom: 4px; }
+    .empresa-info { color: #444; line-height: 1.5; }
+    .doc { text-align: right; }
+    .doc h2 { margin: 0 0 4px 0; font-size: 16px; color: #1a237e; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     th, td { border: 1px solid #ccc; padding: 6px; }
-    th { background: #f3f3f3; text-align: left; }
+    th { background: #e8eaf6; color: #1a237e; text-align: left; }
     .num { text-align: right; }
-    .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; }
+    h3 { color: #1a237e; margin: 18px 0 6px 0; font-size: 13px; border-bottom: 1px solid #1a237e; padding-bottom: 3px; }
+    .factura-section { margin-bottom: 14px; }
+    .factura-section h4 { margin: 8px 0 4px 0; font-size: 12px; color: #333; }
+    .total-row { font-weight: bold; background: #e8eaf6; }
+    .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 11px; color: #555; }
     .firma { margin-top: 24px; }
     .no-print { margin-bottom: 10px; }
     @media print {
@@ -27,38 +34,126 @@
   </div>
   <div class="header">
     <div class="empresa">
+      <img src="{% static 'img/logo.png' %}" alt="Empresa" class="logo-empresa">
       {% if empresa %}
-        <h1>{{ empresa.nombre_empresa }}</h1>
-        <div>RIF: {{ empresa.rif }}</div>
-        <div>{{ empresa.direccion }}</div>
-        <div>Tel: {{ empresa.telefono }}</div>
-        {% if empresa.email %}<div>Email: {{ empresa.email }}</div>{% endif %}
-      {% else %}
-        <h1>LacteOps</h1>
-        <div>Empresa no configurada</div>
+        <div class="empresa-info">
+          <div>RIF: {{ empresa.rif }}</div>
+          <div>{{ empresa.direccion }}</div>
+          <div>Tel: {{ empresa.telefono }}</div>
+          {% if empresa.email %}<div>{{ empresa.email }}</div>{% endif %}
+        </div>
       {% endif %}
     </div>
     <div class="doc">
-      <h2>Recibo de Compra</h2>
-      <div>ID: {{ obj.id }}</div>
+      <h2>{% if obj.es_consolidado %}Voucher de Pago Consolidado{% else %}Recibo de Compra{% endif %}</h2>
+      <div>Pago #{{ obj.id }}</div>
       <div>Fecha: {{ obj.fecha }}</div>
     </div>
   </div>
+
+  {# ── Datos del pago ── #}
   <table>
-    <tr><th>Factura</th><td>{{ obj.factura.numero }}</td></tr>
-    <tr><th>Proveedor</th><td>{{ obj.factura.proveedor }}</td></tr>
+    {% if obj.factura %}
+      <tr><th>Factura</th><td>{{ obj.factura.numero }}</td></tr>
+      <tr><th>Proveedor</th><td>{{ obj.factura.proveedor }}</td></tr>
+    {% else %}
+      <tr><th>Tipo</th><td>Pago Consolidado ({{ detalles_facturas|length }} facturas)</td></tr>
+    {% endif %}
     <tr><th>Monto</th><td class="num">{{ obj.monto }}</td></tr>
-    <tr><th>Moneda</th><td>{{ obj.moneda }}</td></tr>
+    <tr><th>Moneda</th><td>{{ obj.get_moneda_display }}</td></tr>
     <tr><th>Tasa Cambio</th><td class="num">{{ obj.tasa_cambio }}</td></tr>
     <tr><th>Monto USD</th><td class="num">{{ obj.monto_usd }}</td></tr>
-    <tr><th>Medio Pago</th><td>{{ obj.medio_pago }}</td></tr>
-    <tr><th>Cuenta Origen</th><td>{{ obj.cuenta_origen }}</td></tr>
-    <tr><th>Referencia</th><td>{{ obj.referencia }}</td></tr>
+    <tr><th>Medio Pago</th><td>{{ obj.get_medio_pago_display }}</td></tr>
+    <tr><th>Cuenta Origen</th><td>{{ obj.cuenta_origen|default:"-" }}</td></tr>
+    <tr><th>Referencia</th><td>{{ obj.referencia|default:"-" }}</td></tr>
   </table>
+
+  {# ── Detalle de facturas (consolidado) ── #}
+  {% if detalles_facturas %}
+    <h3>Facturas cubiertas por este pago</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Factura</th>
+          <th>Proveedor</th>
+          <th>Total Factura (USD)</th>
+          <th>Monto Aplicado (USD)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for det in detalles_facturas %}
+        <tr>
+          <td>{{ det.factura.numero }}</td>
+          <td>{{ det.factura.proveedor.nombre }}</td>
+          <td class="num">{{ det.factura.total }}</td>
+          <td class="num">{{ det.monto_aplicado }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+          <td colspan="3">Total Aplicado</td>
+          <td class="num">{{ total_aplicado }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    {# ── Detalle de artículos por factura ── #}
+    {% for det in detalles_facturas %}
+    <div class="factura-section">
+      <h4>Detalle Factura {{ det.factura.numero }} ({{ det.factura.proveedor.nombre }})</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Cantidad</th>
+            <th>Costo Unit.</th>
+            <th>Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for linea in det.factura.detalles.all %}
+          <tr>
+            <td>{{ linea.producto.nombre }}</td>
+            <td class="num">{{ linea.cantidad }}</td>
+            <td class="num">{{ linea.costo_unitario }}</td>
+            <td class="num">{{ linea.subtotal }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+
+  {% elif obj.factura %}
+    {# ── Detalle de la factura individual ── #}
+    <h3>Detalle de la Factura {{ obj.factura.numero }}</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>Cantidad</th>
+          <th>Costo Unit.</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for linea in obj.factura.detalles.all %}
+        <tr>
+          <td>{{ linea.producto.nombre }}</td>
+          <td class="num">{{ linea.cantidad }}</td>
+          <td class="num">{{ linea.costo_unitario }}</td>
+          <td class="num">{{ linea.subtotal }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% if obj.notas %}
+    <p><strong>Notas:</strong> {{ obj.notas }}</p>
+  {% endif %}
+
   <div class="footer">
-    {% if empresa and empresa.pie_documento %}
-      <div>{{ empresa.pie_documento }}</div>
-    {% endif %}
+    {% if empresa and empresa.pie_documento %}<div>{{ empresa.pie_documento }}</div>{% endif %}
     <div class="firma">Firma y nombre: ____________________________</div>
   </div>
 </body>

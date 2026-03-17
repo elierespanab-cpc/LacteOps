@@ -7,7 +7,7 @@ Uso: python manage.py actualizar_tasa_bcv
 import re
 import ssl
 import urllib.request
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand
@@ -45,12 +45,36 @@ class Command(BaseCommand):
             tasa_str = m.group(1).strip().replace(',', '.')
             tasa = Decimal(tasa_str).quantize(Decimal('0.000001'))
 
+            hoy = date.today()
             obj, created = TasaCambio.objects.update_or_create(
-                fecha=date.today(),
+                fecha=hoy,
                 defaults={'tasa': tasa, 'fuente': 'BCV_AUTO'},
             )
             accion = 'creada' if created else 'actualizada'
-            self.stdout.write(f'Tasa BCV {accion}: {tasa} VES/USD ({date.today()})')
+            self.stdout.write(f'Tasa BCV {accion}: {tasa} VES/USD ({hoy})')
+
+            # Rellenar huecos (fines de semana, feriados) entre la última
+            # tasa conocida y hoy, usando la tasa de hoy como aplicable.
+            ultima = (
+                TasaCambio.objects
+                .filter(fecha__lt=hoy)
+                .order_by('-fecha')
+                .first()
+            )
+            if ultima:
+                gap_days = (hoy - ultima.fecha).days
+                if gap_days > 1:
+                    rellenos = []
+                    for offset in range(1, gap_days):
+                        dia = ultima.fecha + timedelta(days=offset)
+                        rellenos.append(TasaCambio(
+                            fecha=dia, tasa=tasa, fuente='BCV_AUTO',
+                        ))
+                    TasaCambio.objects.bulk_create(rellenos, ignore_conflicts=True)
+                    self.stdout.write(
+                        f'Rellenados {len(rellenos)} días sin tasa '
+                        f'({ultima.fecha + timedelta(1)} a {hoy - timedelta(1)})'
+                    )
 
         except Exception as exc:
             self.stderr.write(f'BCV no disponible: {exc}')

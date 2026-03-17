@@ -77,51 +77,6 @@ def reporte_ventas(request):
         columnas = [
             "Numero",
             "Fecha",
-            "Proveedor",
-            "Articulo",
-            "Cantidad",
-            "Precio Unitario",
-            "Subtotal",
-            "Moneda",
-            "Monto USD",
-            "Estado",
-        ]
-        filas = []
-        for d in detalles:
-            if d.factura.moneda == "USD":
-                monto_usd = d.subtotal
-            else:
-                monto_usd = (
-                    d.subtotal / d.factura.tasa_cambio
-                    if d.factura.tasa_cambio and d.factura.tasa_cambio > 0
-                    else Decimal("0.00")
-                )
-            filas.append(
-                [
-                    d.factura.numero,
-                    d.factura.fecha,
-                    d.factura.proveedor.razon_social if d.factura.proveedor else "",
-                    f"{d.producto.codigo} - {d.producto.nombre}",
-                    d.cantidad,
-                    d.precio_unitario,
-                    d.subtotal,
-                    d.factura.moneda,
-                    monto_usd,
-                    d.factura.estado,
-                ]
-            )
-        return exportar_excel(
-            "reporte_compras",
-            columnas,
-            [[str(v) for v in fila] for fila in filas],
-            empresa=empresa,
-            parametros=parametros,
-        )
-
-    if "exportar" in request.GET:
-        columnas = [
-            "Numero",
-            "Fecha",
             "Cliente",
             "Articulo",
             "Cantidad",
@@ -145,7 +100,7 @@ def reporte_ventas(request):
                 [
                     d.factura.numero,
                     d.factura.fecha,
-                    d.factura.cliente.razon_social if d.factura.cliente else "",
+                    d.factura.cliente.nombre if d.factura.cliente else "",
                     f"{d.producto.codigo} - {d.producto.nombre}",
                     d.cantidad,
                     d.precio_unitario,
@@ -170,7 +125,7 @@ def reporte_ventas(request):
         "agrupar_por_cliente": agrupar_por_cliente,
         "detalles": detalles,
         "clientes": Cliente.objects.all(),
-        "productos": Producto.objects.filter(activo=True),
+        "productos": Producto.objects.all(),
     }
     return render(request, "reportes/ventas.html", context)
 
@@ -263,7 +218,7 @@ def reporte_cxc(request):
             fv = item["factura"]
             filas.append(
                 [
-                    fv.cliente.razon_social if fv.cliente else "",
+                    fv.cliente.nombre if fv.cliente else "",
                     fv.numero,
                     fv.fecha,
                     fv.fecha_vencimiento,
@@ -323,6 +278,63 @@ def reporte_compras(request):
 
     detalles = list(qs.order_by("factura__fecha", "factura__numero"))
 
+    parametros = {}
+    if fecha_desde:
+        parametros["Desde"] = fecha_desde
+    if fecha_hasta:
+        parametros["Hasta"] = fecha_hasta
+    if proveedor_ids:
+        parametros["Proveedores"] = ", ".join(proveedor_ids)
+    if estados:
+        parametros["Estados"] = ", ".join(estados)
+    if agrupar_por_proveedor:
+        parametros["Agrupar por proveedor"] = "Sí"
+
+    if "exportar" in request.GET:
+        columnas = [
+            "Numero",
+            "Fecha",
+            "Proveedor",
+            "Articulo",
+            "Cantidad",
+            "Costo Unitario",
+            "Subtotal",
+            "Moneda",
+            "Monto USD",
+            "Estado",
+        ]
+        filas = []
+        for d in detalles:
+            if d.factura.moneda == "USD":
+                monto_usd = d.subtotal
+            else:
+                monto_usd = (
+                    d.subtotal / d.factura.tasa_cambio
+                    if d.factura.tasa_cambio and d.factura.tasa_cambio > 0
+                    else Decimal("0.00")
+                )
+            filas.append(
+                [
+                    d.factura.numero,
+                    d.factura.fecha,
+                    d.factura.proveedor.nombre if d.factura.proveedor else "",
+                    f"{d.producto.codigo} - {d.producto.nombre}",
+                    d.cantidad,
+                    d.costo_unitario,
+                    d.subtotal,
+                    d.factura.moneda,
+                    monto_usd,
+                    d.factura.estado,
+                ]
+            )
+        return exportar_excel(
+            "reporte_compras",
+            columnas,
+            [[str(v) for v in fila] for fila in filas],
+            empresa=empresa,
+            parametros=parametros,
+        )
+
     context = {
         "empresa": empresa,
         "fecha_desde": fecha_desde,
@@ -330,7 +342,7 @@ def reporte_compras(request):
         "agrupar_por_proveedor": agrupar_por_proveedor,
         "detalles": detalles,
         "proveedores": Proveedor.objects.all(),
-        "productos": Producto.objects.filter(activo=True),
+        "productos": Producto.objects.all(),
     }
     return render(request, "reportes/compras.html", context)
 
@@ -476,7 +488,7 @@ def reporte_cxp(request):
             )
             filas.append(
                 [
-                    doc.proveedor.razon_social if doc.proveedor else "",
+                    doc.proveedor.nombre if doc.proveedor else "",
                     "Gasto/Servicio" if item["es_gasto"] else "Factura Compra",
                     doc.numero,
                     doc.fecha_vencimiento,
@@ -686,7 +698,7 @@ def reporte_gastos(request):
                 filas.append(
                     [
                         g.numero,
-                        g.proveedor.razon_social if g.proveedor else "",
+                        g.proveedor.nombre if g.proveedor else "",
                         g.categoria_gasto,
                         g.descripcion,
                         g.monto,

@@ -6,7 +6,7 @@
     <br><small>Al corte: {{ fecha_corte|date:"Y-m-d" }} | Tipo: {{ tipo }}</small>
 {% endblock %}
 
-{% block content %}
+{% block report_content %}
 <div class="no-print filters">
     <form method="get">
         <label>Fecha de Corte: <input type="date" name="fecha_corte" value="{{ fecha_corte|date:'Y-m-d' }}"></label>

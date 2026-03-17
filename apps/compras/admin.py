@@ -1,14 +1,18 @@
 # -*- coding: utf-8 -*-
 import logging
 from datetime import date
+from decimal import Decimal
 
+from django import forms
 from django.contrib import admin, messages
+from django.db import transaction
 
 from apps.compras.models import (
     Proveedor,
     FacturaCompra,
     DetalleFacturaCompra,
     Pago,
+    DetallePagoFactura,
     GastoServicio,
 )
 from apps.almacen.models import Producto
@@ -38,6 +42,7 @@ class DetalleFacturaCompraInline(admin.TabularInline):
 class PagoInline(admin.TabularInline):
     model = Pago
     extra = 1
+    fk_name = "factura"
 
 
 @admin.register(FacturaCompra)
@@ -91,11 +96,6 @@ class FacturaCompraAdmin(admin.ModelAdmin):
     anular_facturas.short_description = "Anular facturas seleccionadas"
 
     def save_formset(self, request, form, formset, change):
-        """
-        Calcula monto_usd con bimoneda al crear Pagos desde el inline.
-        Si el pago es en VES y no hay tasa BCV disponible, lo omite con error.
-        Si hay cuenta_origen, registra el MovimientoCaja correspondiente.
-        """
         from apps.bancos.services import (
             calcular_bimoneda,
             normalizar_monto_para_cuenta,
@@ -117,6 +117,7 @@ class FacturaCompraAdmin(admin.ModelAdmin):
                     monto_caja, moneda_caja, tasa_caja = normalizar_monto_para_cuenta(
                         obj.monto, obj.moneda, obj.tasa_cambio, obj.cuenta_origen
                     )
+                    ref = obj.factura.numero if obj.factura else ""
                     try:
                         registrar_movimiento_caja(
                             cuenta=obj.cuenta_origen,
@@ -124,7 +125,7 @@ class FacturaCompraAdmin(admin.ModelAdmin):
                             monto=monto_caja,
                             moneda=moneda_caja,
                             tasa_cambio=tasa_caja,
-                            referencia=obj.factura.numero,
+                            referencia=ref,
                         )
                     except LacteOpsError as e:
                         messages.warning(
@@ -176,31 +177,125 @@ class GastoServicioAdmin(admin.ModelAdmin):
     pagar_gastos.short_description = "Pagar gastos/servicios seleccionados"
 
 
-# --- Sprint 2: Admin Pago + botones de impresion ---
-from apps.compras.models import Pago, GastoServicio
+# ─────────────────────────────────────────────────────────────────────────────
+# PagoAdmin — Pago individual y consolidado
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PagoConsolidadoForm(forms.ModelForm):
+    """
+    Formulario para Pago que permite:
+    - Pago individual: seleccionar UNA factura en el campo FK 'factura'.
+    - Pago consolidado: seleccionar VARIAS facturas con checkboxes.
+    """
+    facturas_consolidado = forms.ModelMultipleChoiceField(
+        queryset=FacturaCompra.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Facturas a pagar (consolidado)",
+        help_text="Seleccione las facturas que desea cubrir con este pago. "
+                  "Deje vacío si usa el campo Factura individual arriba.",
+    )
+
+    class Meta:
+        model = Pago
+        fields = [
+            'factura', 'facturas_consolidado',
+            'fecha', 'monto', 'moneda', 'tasa_cambio',
+            'cuenta_origen', 'medio_pago', 'referencia', 'notas',
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Facturas APROBADAS con saldo pendiente > 0
+        facturas_abiertas = []
+        for f in FacturaCompra.objects.filter(estado='APROBADA').order_by('-fecha', '-numero'):
+            if f.get_saldo_pendiente() > Decimal('0'):
+                facturas_abiertas.append(f.pk)
+        qs = FacturaCompra.objects.filter(pk__in=facturas_abiertas)
+        self.fields['facturas_consolidado'].queryset = qs
+        choices = []
+        for f in qs:
+            saldo = f.get_saldo_pendiente()
+            label = (
+                f"{f.numero} | {f.proveedor.nombre} | "
+                f"Total: {f.total} USD | Saldo: {saldo} USD"
+            )
+            choices.append((f.pk, label))
+        self.fields['facturas_consolidado'].choices = choices
+
+        # Si editamos un pago consolidado existente, marcar sus facturas
+        if self.instance and self.instance.pk and self.instance.es_consolidado:
+            self.initial['facturas_consolidado'] = list(
+                self.instance.detalle_facturas.values_list('factura_id', flat=True)
+            )
+
+    def clean(self):
+        cleaned = super().clean()
+        factura = cleaned.get('factura')
+        facturas_cons = cleaned.get('facturas_consolidado')
+
+        if factura and facturas_cons:
+            raise forms.ValidationError(
+                "Seleccione UNA factura individual O varias facturas consolidadas, no ambas."
+            )
+        if not factura and not facturas_cons:
+            raise forms.ValidationError(
+                "Debe seleccionar al menos una factura (individual o consolidada)."
+            )
+        return cleaned
+
+
+class DetallePagoFacturaInline(admin.TabularInline):
+    model = DetallePagoFactura
+    extra = 0
+    readonly_fields = ('factura', 'monto_aplicado')
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Pago)
 class PagoAdmin(admin.ModelAdmin):
-    list_display = ("factura", "fecha", "monto", "moneda", "monto_usd", "medio_pago")
+    form = PagoConsolidadoForm
+    inlines = [DetallePagoFacturaInline]
+    list_display = (
+        "id", "get_tipo_pago", "get_facturas_display", "fecha",
+        "monto", "moneda", "monto_usd", "medio_pago",
+    )
+    list_filter = ("moneda", "medio_pago", "fecha")
+    search_fields = ("referencia", "factura__numero")
+    readonly_fields = ("monto_usd",)
+
+    change_form_template = "admin/print_change_form.html"
+    print_url_name = "compras:imprimir_recibo_compra"
 
     class Media:
         js = ("admin/js/tasa_auto_pago_standalone.js",)
+        css = {"all": ("admin/css/pago_consolidado.css",)}
+
+    @admin.display(description="Tipo")
+    def get_tipo_pago(self, obj):
+        return "Consolidado" if obj.es_consolidado else "Individual"
+
+    @admin.display(description="Facturas")
+    def get_facturas_display(self, obj):
+        if obj.factura:
+            return obj.factura.numero
+        nums = list(obj.detalle_facturas.values_list('factura__numero', flat=True))
+        return ", ".join(nums) if nums else "-"
 
     def save_model(self, request, obj, form, change):
-        """
-        Calcula monto_usd con bimoneda al crear Pagos desde el formulario
-        independiente de PagoAdmin (punto de entrada distinto al inline).
-        Si el pago es en VES y no hay tasa BCV disponible, lo omite con error.
-        Si hay cuenta_origen, registra el MovimientoCaja correspondiente.
-        """
         from apps.bancos.services import (
             calcular_bimoneda,
             normalizar_monto_para_cuenta,
             registrar_movimiento_caja,
         )
 
+        facturas_cons = form.cleaned_data.get('facturas_consolidado')
+        es_consolidado = bool(facturas_cons)
         es_nuevo = obj._state.adding
+
         if es_nuevo:
             try:
                 obj.monto_usd, obj.tasa_cambio = calcular_bimoneda(
@@ -210,12 +305,43 @@ class PagoAdmin(admin.ModelAdmin):
                 messages.error(request, e.message)
                 return
 
+        if es_consolidado:
+            obj.factura = None
+
         super().save_model(request, obj, form, change)
 
+        # Crear DetallePagoFactura para pago consolidado
+        if es_nuevo and es_consolidado:
+            total_saldo = Decimal('0')
+            detalles = []
+            for factura in facturas_cons:
+                saldo = factura.get_saldo_pendiente()
+                detalles.append(DetallePagoFactura(
+                    pago=obj,
+                    factura=factura,
+                    monto_aplicado=saldo,
+                ))
+                total_saldo += saldo
+
+            if obj.monto_usd < total_saldo:
+                messages.warning(
+                    request,
+                    f"El monto USD ({obj.monto_usd}) es menor que el saldo total "
+                    f"de las facturas ({total_saldo}). Se aplicará proporcionalmente.",
+                )
+                for det in detalles:
+                    proporcion = det.monto_aplicado / total_saldo
+                    det.monto_aplicado = (obj.monto_usd * proporcion).quantize(Decimal('0.01'))
+
+            with transaction.atomic():
+                DetallePagoFactura.objects.bulk_create(detalles)
+
+        # Registrar movimiento de caja
         if es_nuevo and obj.cuenta_origen:
             monto_caja, moneda_caja, tasa_caja = normalizar_monto_para_cuenta(
                 obj.monto, obj.moneda, obj.tasa_cambio, obj.cuenta_origen
             )
+            ref = obj._referencia_pago()
             try:
                 registrar_movimiento_caja(
                     cuenta=obj.cuenta_origen,
@@ -223,7 +349,7 @@ class PagoAdmin(admin.ModelAdmin):
                     monto=monto_caja,
                     moneda=moneda_caja,
                     tasa_cambio=tasa_caja,
-                    referencia=obj.factura.numero if obj.factura else "",
+                    referencia=ref,
                 )
             except LacteOpsError as e:
                 messages.warning(
@@ -240,13 +366,16 @@ class PagoAdmin(admin.ModelAdmin):
                     "Pago guardado, pero movimiento de caja falló. Ver logs.",
                 )
 
+        if es_consolidado and es_nuevo:
+            nums = ", ".join(f.numero for f in facturas_cons)
+            messages.success(
+                request,
+                f"Pago consolidado registrado para {len(facturas_cons)} facturas: {nums}",
+            )
 
+
+# --- Print button config ---
 _gasto_admin = admin.site._registry.get(GastoServicio)
 if _gasto_admin:
     _gasto_admin.change_form_template = "admin/print_change_form.html"
     _gasto_admin.print_url_name = "compras:imprimir_gasto_servicio"
-
-_pago_admin = admin.site._registry.get(Pago)
-if _pago_admin:
-    _pago_admin.change_form_template = "admin/print_change_form.html"
-    _pago_admin.print_url_name = "compras:imprimir_recibo_compra"

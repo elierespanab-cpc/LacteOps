@@ -1,27 +1,36 @@
 {% extends 'admin/base.html' %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block title %}{{ title }} - LacteOps{% endblock %}
 
 {% block extrastyle %}
 <style>
     body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px; color: #333; }
-    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #ccc; padding-bottom: 10px; }
-    .header h1 { margin: 0; font-size: 18px; }
+    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #1a237e; padding-bottom: 12px; }
+    .logo-reporte { max-height: 60px; width: auto; display: block; margin: 0 auto 8px auto; }
     .header p { margin: 2px 0; font-size: 12px; color: #555; }
-    .report-title { text-align: center; margin: 15px 0; font-size: 16px; font-weight: bold; }
+    .report-title { text-align: center; margin: 15px 0; font-size: 16px; font-weight: bold; color: #1a237e; }
     .filters { margin-bottom: 20px; font-size: 11px; background: #f9f9f9; padding: 10px; border: 1px solid #ddd; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
     th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
-    th { background-color: #f2f2f2; font-weight: bold; }
+    th { background-color: #e8eaf6; color: #1a237e; font-weight: bold; }
     .text-right { text-align: right; }
     .text-center { text-align: center; }
     .total-row { font-weight: bold; background-color: #eee; }
     .group-header { font-weight: bold; background-color: #e0e0e0; padding-top: 15px; }
     @media print {
-        .no-print { display: none; }
-        body { font-size: 10px; }
+        .no-print,
+        .main-sidebar, aside.main-sidebar,
+        .main-header, nav.main-header,
+        .content-header, .breadcrumb,
+        footer.main-footer { display: none !important; }
+        .content-wrapper {
+            margin-left: 0 !important;
+            padding: 0 !important;
+        }
+        body { font-size: 10px; margin: 0; }
         .filters { border: none; background: none; padding: 0; }
+        @page { size: letter; margin: 0.5in; }
     }
 </style>
 {% endblock %}
@@ -39,18 +48,15 @@
     </div>
 
     <div class="header">
+        <img src="{% static 'img/logo.png' %}" alt="Lácteos El Cristo" class="logo-reporte">
         {% if empresa %}
-            <h1>{{ empresa.nombre_comercial }}</h1>
-            <p><strong>Razn Social:</strong> {{ empresa.razon_social }} | <strong>RIF:</strong> {{ empresa.rif }}</p>
+            <p><strong>{{ empresa.nombre_empresa }}</strong> &nbsp;|&nbsp; RIF: {{ empresa.rif }}</p>
             <p>{{ empresa.direccion }}</p>
-        {% else %}
-            <h1>LacteOps ERP</h1>
-            <p>Empresa no configurada (Configuracin General)</p>
         {% endif %}
     </div>
 
     <div class="report-title">
-        {% block report_title %}Ttulo del Reporte{% endblock %}
+        {% block report_title %}Título del Reporte{% endblock %}
     </div>
 
     {% block report_content %}

@@ -1,0 +1,11 @@
+/* ── Login page: logo centrado y proporcionado ──────────────── */
+.login-logo {
+    text-align: center;
+}
+.login-logo img {
+    max-width: 320px;
+    width: 80%;
+    height: auto;
+    margin: 0 auto;
+    display: block;
+}
