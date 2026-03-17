@@ -170,6 +170,15 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
+echo       Cargando datos iniciales...
+python manage.py loaddata deploy/datos_iniciales.json
+if %ERRORLEVEL% NEQ 0 (
+    color 0C
+    echo ERROR: Fallo la carga de datos iniciales.
+    pause
+    exit /b 1
+)
+
 echo       Recopilando archivos estaticos...
 python manage.py collectstatic --noinput >nul
 
