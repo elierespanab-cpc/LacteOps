@@ -78,13 +78,21 @@ class FacturaCompra(AuditableModel):
     def get_saldo_pendiente(self):
         """
         Calcula el saldo pendiente en USD.
-        Usa monto_usd de cada Pago (siempre en USD) para sumar lo pagado.
+        Suma pagos individuales (FK) + pagos consolidados (DetallePagoFactura).
         Retorna max(0, total - pagado) para evitar saldos negativos.
         """
-        pagado = sum(
+        # Pagos individuales (FK directo)
+        pagado_individual = sum(
             p.monto_usd for p in self.pagos.all() if p.monto_usd
         ) or Decimal('0')
-        return max(Decimal('0'), self.total - pagado)
+        # Pagos consolidados (via DetallePagoFactura)
+        from apps.compras.models import DetallePagoFactura
+        pagado_consolidado = DetallePagoFactura.objects.filter(
+            factura=self
+        ).aggregate(
+            total=models.Sum('monto_aplicado')
+        )['total'] or Decimal('0')
+        return max(Decimal('0'), self.total - pagado_individual - pagado_consolidado)
 
     def aprobar(self):
         """
@@ -184,7 +192,11 @@ class Pago(AuditableModel):
         ('TRANSFERENCIA_VES', 'Transferencia VES'),
     ]
 
-    factura = models.ForeignKey(FacturaCompra, related_name='pagos', on_delete=models.PROTECT, verbose_name="Factura de Compra")
+    factura = models.ForeignKey(
+        FacturaCompra, related_name='pagos', on_delete=models.PROTECT,
+        null=True, blank=True, verbose_name="Factura de Compra",
+        help_text="Para pago individual. Dejar vacío si es pago consolidado.",
+    )
     fecha = models.DateField(verbose_name="Fecha de Pago")
     monto = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Monto")
     moneda = models.CharField(max_length=3, choices=FacturaCompra.MONEDA_CHOICES, default='USD', verbose_name="Moneda")
@@ -201,7 +213,31 @@ class Pago(AuditableModel):
         ordering = ['-fecha', 'id']
 
     def __str__(self):
-        return f"Pago {self.monto} - Factura: {self.factura.numero} ({self.fecha})"
+        if self.factura:
+            return f"Pago {self.monto} - Factura: {self.factura.numero} ({self.fecha})"
+        n_facturas = self.detalle_facturas.count()
+        return f"Pago Consolidado {self.monto} - {n_facturas} facturas ({self.fecha})"
+
+    @property
+    def es_consolidado(self):
+        return self.factura is None
+
+    def get_facturas(self):
+        """Retorna las facturas asociadas (sea individual o consolidado)."""
+        if self.factura:
+            return FacturaCompra.objects.filter(pk=self.factura_id)
+        return FacturaCompra.objects.filter(
+            detalle_pagos__pago=self
+        ).distinct()
+
+    def _referencia_pago(self):
+        """Genera texto de referencia para el movimiento de caja."""
+        if self.factura:
+            return f'PAGO-{self.factura.numero}'
+        nums = list(
+            self.detalle_facturas.values_list('factura__numero', flat=True)
+        )
+        return f'PAGO-CONS-{",".join(nums)}' if nums else 'PAGO-CONS'
 
     def registrar(self):
         """
@@ -230,6 +266,8 @@ class Pago(AuditableModel):
             monto_usd = monto.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             tasa = Decimal('1.000000')
 
+        ref = self._referencia_pago()
+
         with transaction.atomic():
             # Bloquear la cuenta para evitar saldo negativo concurrente
             cuenta = CuentaBancaria.objects.select_for_update().get(pk=self.cuenta_origen_id)
@@ -239,16 +277,31 @@ class Pago(AuditableModel):
                 monto=monto,
                 moneda=self.moneda,
                 tasa_cambio=tasa,
-                referencia=f'PAGO-{self.factura.numero}',
-                notas=f'Pago factura compra {self.factura.numero}',
+                referencia=ref,
+                notas=f'Pago compra {ref}',
             )
             self.monto_usd = monto_usd
             self.save(update_fields=['monto_usd'])
 
         logger.info(
-            'Pago registrado | Factura: %s | Cuenta: %s | Monto: %s %s | USD: %s',
-            self.factura.numero, self.cuenta_origen, monto, self.moneda, monto_usd
+            'Pago registrado | Ref: %s | Cuenta: %s | Monto: %s %s | USD: %s',
+            ref, self.cuenta_origen, monto, self.moneda, monto_usd
         )
+
+
+class DetallePagoFactura(AuditableModel):
+    """Tabla intermedia para pagos consolidados: distribuye el monto entre facturas."""
+    pago = models.ForeignKey(Pago, related_name='detalle_facturas', on_delete=models.CASCADE, verbose_name="Pago")
+    factura = models.ForeignKey(FacturaCompra, related_name='detalle_pagos', on_delete=models.PROTECT, verbose_name="Factura")
+    monto_aplicado = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Monto Aplicado (USD)")
+
+    class Meta:
+        verbose_name = "Detalle Pago - Factura"
+        verbose_name_plural = "Detalles Pago - Facturas"
+        unique_together = [('pago', 'factura')]
+
+    def __str__(self):
+        return f"Pago #{self.pago_id} → {self.factura.numero}: {self.monto_aplicado} USD"
 
 
 class GastoServicio(AuditableModel):

@@ -1,0 +1,20 @@
+/* Estilos para el formulario de pago consolidado */
+.field-facturas_consolidado ul {
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 8px 12px;
+    background: #fafafa;
+}
+.field-facturas_consolidado ul li {
+    padding: 4px 0;
+    border-bottom: 1px solid #eee;
+}
+.field-facturas_consolidado ul li:last-child {
+    border-bottom: none;
+}
+.field-facturas_consolidado ul li label {
+    font-family: monospace;
+    font-size: 12px;
+}

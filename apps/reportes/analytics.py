@@ -111,8 +111,8 @@ def calcular_cce():
              for d in f.detalles.all()) or Decimal('1')
     dio = (inv / cv * 90).quantize(Decimal('0.1'))
     # DPO
-    pagos = Pago.objects.filter(fecha__gte=hace90).select_related('factura')
-    dpo_v = [(p.fecha - p.factura.fecha).days for p in pagos if p.factura and p.factura.fecha]
+    pagos = Pago.objects.filter(fecha__gte=hace90, factura__isnull=False).select_related('factura')
+    dpo_v = [(p.fecha - p.factura.fecha).days for p in pagos if p.factura.fecha]
     dpo = Decimal(str(sum(dpo_v) / len(dpo_v))).quantize(Decimal('0.1')) if dpo_v else Decimal('0')
     return {
         'cce': (dso + dio - dpo).quantize(Decimal('0.1')),

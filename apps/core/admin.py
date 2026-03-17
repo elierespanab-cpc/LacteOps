@@ -68,9 +68,9 @@ class TasaCambioAdmin(admin.ModelAdmin):
         call_command("importar_historico_bcv", stdout=out, stderr=err)
         if err.getvalue():
             self.message_user(request, err.getvalue(), level=messages.WARNING)
-        self.message_user(request, out.getvalue() or "ImportaciÃ³n completada.")
+        self.message_user(request, out.getvalue() or "Importación completada.")
 
-    importar_historico.short_description = "Importar histÃ³rico completo BCV"
+    importar_historico.short_description = "Importar histórico completo BCV"
 
 
 @admin.register(CategoriaGasto)
@@ -80,9 +80,9 @@ class CategoriaGastoAdmin(admin.ModelAdmin):
     search_fields = ("nombre",)
 
     def nombre_indentado(self, obj):
-        return ("â€” " if obj.padre else "") + obj.nombre
+        return ("-- " if obj.padre else "") + obj.nombre
 
-    nombre_indentado.short_description = "CategorÃ­a"
+    nombre_indentado.short_description = "Categoría"
 
     def get_queryset(self, request):
         return (

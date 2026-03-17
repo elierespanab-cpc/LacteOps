@@ -1,18 +1,21 @@
-<!doctype html>
+{% load static %}<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Voucher de Tesoreria</title>
+  <title>Voucher de Tesorería</title>
   <style>
     body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 20px; }
-    .header { display: flex; justify-content: space-between; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
-    .empresa h1 { margin: 0; font-size: 18px; }
-    .doc h2 { margin: 0; font-size: 16px; text-align: right; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a237e; padding-bottom: 10px; margin-bottom: 10px; }
+    .empresa { min-width: 200px; }
+    .logo-empresa { max-height: 65px; width: auto; display: block; margin-bottom: 4px; }
+    .empresa-info { color: #444; line-height: 1.5; }
+    .doc { text-align: right; }
+    .doc h2 { margin: 0 0 4px 0; font-size: 16px; color: #1a237e; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     th, td { border: 1px solid #ccc; padding: 6px; }
-    th { background: #f3f3f3; text-align: left; }
+    th { background: #e8eaf6; color: #1a237e; text-align: left; }
     .num { text-align: right; }
-    .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; }
+    .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 11px; color: #555; }
     .firma { margin-top: 24px; }
     .no-print { margin-bottom: 10px; }
     @media print {
@@ -27,20 +30,19 @@
   </div>
   <div class="header">
     <div class="empresa">
+      <img src="{% static 'img/logo.png' %}" alt="Lácteos El Cristo" class="logo-empresa">
       {% if empresa %}
-        <h1>{{ empresa.nombre_empresa }}</h1>
-        <div>RIF: {{ empresa.rif }}</div>
-        <div>{{ empresa.direccion }}</div>
-        <div>Tel: {{ empresa.telefono }}</div>
-        {% if empresa.email %}<div>Email: {{ empresa.email }}</div>{% endif %}
-      {% else %}
-        <h1>LacteOps</h1>
-        <div>Empresa no configurada</div>
+        <div class="empresa-info">
+          <div>RIF: {{ empresa.rif }}</div>
+          <div>{{ empresa.direccion }}</div>
+          <div>Tel: {{ empresa.telefono }}</div>
+          {% if empresa.email %}<div>{{ empresa.email }}</div>{% endif %}
+        </div>
       {% endif %}
     </div>
     <div class="doc">
-      <h2>Voucher Tesoreria</h2>
-      <div>Numero: {{ obj.numero }}</div>
+      <h2>Voucher Tesorería</h2>
+      <div>N°: {{ obj.numero }}</div>
       <div>Fecha: {{ obj.fecha }}</div>
     </div>
   </div>
@@ -51,22 +53,14 @@
     <tr><th>Tasa Cambio</th><td class="num">{{ obj.tasa_cambio }}</td></tr>
     <tr><th>Equivalente USD</th><td class="num">{{ obj.monto_usd }}</td></tr>
     <tr>
-      <th>Categoria</th>
-      <td>
-        {% if obj.categoria.padre %}
-          {{ obj.categoria.padre }} &gt; {{ obj.categoria }}
-        {% else %}
-          {{ obj.categoria }}
-        {% endif %}
-      </td>
+      <th>Categoría</th>
+      <td>{% if obj.categoria.padre %}{{ obj.categoria.padre }} &gt; {{ obj.categoria }}{% else %}{{ obj.categoria }}{% endif %}</td>
     </tr>
-    <tr><th>Descripcion</th><td>{{ obj.descripcion }}</td></tr>
+    <tr><th>Descripción</th><td>{{ obj.descripcion }}</td></tr>
     <tr><th>Registrado por</th><td>{% if obj.registrado_por %}{{ obj.registrado_por }}{% else %}N/A{% endif %}</td></tr>
   </table>
   <div class="footer">
-    {% if empresa and empresa.pie_documento %}
-      <div>{{ empresa.pie_documento }}</div>
-    {% endif %}
+    {% if empresa and empresa.pie_documento %}<div>{{ empresa.pie_documento }}</div>{% endif %}
     <div class="firma">Firma y nombre: ____________________________</div>
   </div>
 </body>
