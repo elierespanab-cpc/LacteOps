@@ -9,7 +9,7 @@
     </small>
 {% endblock %}
 
-{% block content %}
+{% block report_content %}
 <div class="no-print filters">
     <form method="get">
         <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
@@ -86,7 +86,7 @@
             {% for g in grupo.list %}
             <tr>
                 <td>{{ g.numero }}</td>
-                <td>{{ g.proveedor.razon_social }}</td>
+                <td>{{ g.proveedor.nombre }}</td>
                 <td>{{ g.categoria_gasto }}</td>
                 <td>{{ g.descripcion }}</td>
                 <td class="text-right">{{ g.monto|intcomma }}</td>

@@ -9,7 +9,7 @@
     </small>
 {% endblock %}
 
-{% block content %}
+{% block report_content %}
 <div class="no-print filters">
     <form method="get">
         <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
@@ -18,7 +18,7 @@
         <label>Proveedores: 
             <select name="proveedor" multiple>
                 {% for p in proveedores %}
-                <option value="{{ p.id }}">{{ p.razon_social }}</option>
+                <option value="{{ p.id }}">{{ p.nombre }}</option>
                 {% endfor %}
             </select>
         </label>
@@ -54,7 +54,7 @@
         {% for grupo in prov_group %}
             {% if agrupar_por_proveedor %}
             <tr class="group-header">
-                <td colspan="10">Proveedor: {{ grupo.grouper.razon_social }} (RIF: {{ grupo.grouper.rif }})</td>
+                <td colspan="10">Proveedor: {{ grupo.grouper.nombre }} (RIF: {{ grupo.grouper.rif }})</td>
             </tr>
             {% endif %}
             
@@ -62,7 +62,7 @@
             <tr>
                 <td>{{ d.factura.numero }}</td>
                 <td>{{ d.factura.fecha|date:"Y-m-d" }}</td>
-                <td>{{ d.factura.proveedor.razon_social }}</td>
+                <td>{{ d.factura.proveedor.nombre }}</td>
                 <td>{{ d.producto.codigo }} - {{ d.producto.nombre }}</td>
                 <td class="text-right">{{ d.cantidad|intcomma }}</td>
                 <td class="text-right">{{ d.precio_unitario|intcomma }}</td>
