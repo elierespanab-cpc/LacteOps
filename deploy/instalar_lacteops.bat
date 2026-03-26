@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 chcp 65001 >nul
 title === INSTALADOR LacteOps ERP ===
 color 0A
@@ -36,10 +37,12 @@ echo.
 set /p PG_USER="  Usuario PostgreSQL (por defecto: postgres): "
 if "%PG_USER%"=="" set PG_USER=postgres
 set /p PG_PASS="  Contrasena PostgreSQL: "
-set /p PG_HOST="  Host (por defecto: localhost): "
-if "%PG_HOST%"=="" set PG_HOST=localhost
-set /p PG_PORT="  Puerto (por defecto: 5432): "
-if "%PG_PORT%"=="" set PG_PORT=5432
+set PG_HOST=localhost
+set PG_PORT=5432
+set /p PG_HOST_INPUT="  Host (dejar vacio para localhost): "
+set /p PG_PORT_INPUT="  Puerto (dejar vacio para 5432): "
+if not "!PG_HOST_INPUT!"=="" set PG_HOST=!PG_HOST_INPUT!
+if not "!PG_PORT_INPUT!"=="" set PG_PORT=!PG_PORT_INPUT!
 set DB_NAME=lacteops
 echo.
 
@@ -154,6 +157,19 @@ if %ERRORLEVEL% NEQ 0 (
     echo       Base de datos '%DB_NAME%' creada
 ) else (
     echo       Base de datos '%DB_NAME%' ya existe
+)
+echo.
+
+:: ── Configurar lc_messages en PostgreSQL ─────────────────────
+echo Configurando lc_messages en PostgreSQL para compatibilidad UTF-8...
+if not "!PG_BIN!"=="" (
+    for %%i in ("%PG_BIN%\..") do set PG_ROOT=%%~fi
+    set PG_CONF=!PG_ROOT!\data\postgresql.conf
+    powershell -Command "$f='!PG_CONF!'; $lines=Get-Content $f; $found=$false; $new=@(); foreach($l in $lines){ if($l -match 'lc_messages' -and $l -notmatch '^#'){ $found=$true; $new+='lc_messages = ''C''' } else { $new+=$l } }; if(-not $found){ $new+='lc_messages = ''C''' }; Set-Content -Path $f -Value $new -Encoding UTF8"
+    powershell -Command "Get-Service -Name 'postgresql*' | Restart-Service" >nul 2>&1
+    echo       [OK] lc_messages configurado para compatibilidad UTF-8
+) else (
+    echo       AVISO: PostgreSQL no detectado, configura lc_messages manualmente.
 )
 echo.
 
