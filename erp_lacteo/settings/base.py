@@ -249,6 +249,8 @@ JAZZMIN_SETTINGS = {
                 "icon": "fas fa-chart-pie",
             },
             {"name": "Stock", "url": "reportes:stock", "icon": "fas fa-boxes"},
+            {"name": "Kardex", "url": "reportes:kardex", "icon": "fas fa-stream"},
+            {"name": "Tesorería", "url": "reportes:tesoreria", "icon": "fas fa-money-check-alt"},
         ],
         "core": [
             {"name": "Respaldo BD", "url": "/respaldo-bd/", "icon": "fas fa-database"},

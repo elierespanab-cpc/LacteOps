@@ -1,0 +1,87 @@
+{% load static %}<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Nota de Crédito</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a237e; padding-bottom: 10px; margin-bottom: 10px; }
+    .empresa { min-width: 200px; }
+    .logo-empresa { max-height: 65px; width: auto; display: block; margin-bottom: 4px; }
+    .empresa-info { color: #444; line-height: 1.5; }
+    .doc { text-align: right; }
+    .doc h2 { margin: 0 0 4px 0; font-size: 16px; color: #1a237e; }
+    .meta { margin-top: 8px; background: #f7f7f7; padding: 6px 8px; border-radius: 3px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #ccc; padding: 6px; }
+    th { background: #e8eaf6; color: #1a237e; text-align: left; }
+    .num { text-align: right; }
+    .total { margin-top: 8px; font-weight: bold; text-align: right; font-size: 13px; }
+    .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 11px; color: #555; }
+    .firma { margin-top: 24px; }
+    .no-print { margin-bottom: 10px; }
+    @media print {
+      .no-print { display: none; }
+      @page { size: letter; margin: 0.5in; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <button onclick="window.print()">Imprimir</button>
+  </div>
+  <div class="header">
+    <div class="empresa">
+      <img src="{% static 'img/logo.png' %}" alt="Lácteos El Cristo" class="logo-empresa">
+      {% if empresa %}
+        <div class="empresa-info">
+          <div>RIF: {{ empresa.rif }}</div>
+          <div>{{ empresa.direccion }}</div>
+          <div>Tel: {{ empresa.telefono }}</div>
+          {% if empresa.email %}<div>{{ empresa.email }}</div>{% endif %}
+        </div>
+      {% endif %}
+    </div>
+    <div class="doc">
+      <h2>Nota de Crédito</h2>
+      <div>N°: {{ obj.numero }}</div>
+      <div>Fecha: {{ obj.fecha }}</div>
+    </div>
+  </div>
+  <div class="meta">
+    <div>Cliente: <strong>{{ obj.cliente }}</strong></div>
+    <div>Factura origen: {{ obj.factura_origen.numero }}</div>
+    <div>Estado: {{ obj.estado }} &nbsp;|&nbsp; Moneda: {{ obj.moneda }}</div>
+    {% if obj.notas %}<div>Notas: {{ obj.notas }}</div>{% endif %}
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Producto</th>
+        <th class="num">Cantidad</th>
+        <th class="num">Precio</th>
+        <th class="num">Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in obj.detalles.all %}
+      <tr>
+        <td>{{ d.producto.codigo }}</td>
+        <td>{{ d.producto.nombre }}</td>
+        <td class="num">{{ d.cantidad }}</td>
+        <td class="num">{{ d.precio_unitario }}</td>
+        <td class="num">{{ d.subtotal }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">Sin detalles</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="total">Total: {{ obj.total }}</div>
+  <div class="footer">
+    {% if empresa and empresa.pie_documento %}<div>{{ empresa.pie_documento }}</div>{% endif %}
+    <div class="firma">Firma y nombre: ____________________________</div>
+  </div>
+</body>
+</html>

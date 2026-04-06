@@ -1,8 +1,8 @@
 {% extends 'reportes/base_reporte.html' %}
-{% load humanize %}
+{% load humanize custom_filters %}
 
 {% block report_title %}
-    Reporte de Producción
+    Reporte de ProducciÃ³n
     <br><small>
         {% if fecha_desde %}Desde: {{ fecha_desde }} {% endif %}
         {% if fecha_hasta %}Hasta: {{ fecha_hasta }} {% endif %}
@@ -14,6 +14,13 @@
     <form method="get">
         <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
         <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}"></label>
+        <label>Producto:
+            <select name="producto" multiple>
+                {% for p in productos %}
+                <option value="{{ p.id }}" {% if p.id|stringformat:'s' in producto_ids %}selected{% endif %}>{{ p.codigo }} - {{ p.nombre }}</option>
+                {% endfor %}
+            </select>
+        </label>
         <button type="submit">Generar Reporte</button>
     </form>
 </div>
@@ -26,7 +33,7 @@
             <th>Estado</th>
             <th class="text-right">Costo Total MP (USD)</th>
             <th>Producto Obtenido</th>
-            <th class="text-right">Cant. Fìsica</th>
+            <th class="text-right">Cant. FÃ­sica</th>
             <th>Unidad</th>
             <th class="text-right">Kg Totales</th>
             <th class="text-right">Costo Asignado</th>
@@ -42,22 +49,29 @@
                     <td rowspan="{{ orden.salidas.all|length }}">{{ orden.numero }}</td>
                     <td rowspan="{{ orden.salidas.all|length }}">{{ orden.fecha_apertura|date:"Y-m-d" }}</td>
                     <td rowspan="{{ orden.salidas.all|length }}">{{ orden.estado }}</td>
-                    <td rowspan="{{ orden.salidas.all|length }}" class="text-right">{{ orden.mp_total|intcomma }}</td>
+                    <td rowspan="{{ orden.salidas.all|length }}" class="text-right">{{ orden.mp_total|formato_moneda:"USD" }}</td>
                     {% endif %}
                     <td>{{ sal.producto.nombre }} {% if sal.es_subproducto %}(Subprod){% endif %}</td>
-                    <td class="text-right">{{ sal.cantidad|intcomma }}</td>
+                    <td class="text-right">{{ sal.cantidad|formato_cantidad }}</td>
                     <td>{{ sal.producto.unidad_medida.simbolo }}</td>
-                    <td class="text-right">{% if sal.kg_totales %}{{ sal.kg_totales|intcomma }}{% else %}-{% endif %}</td>
-                    <td class="text-right">{{ sal.costo_asignado|default:"0.00"|intcomma }}</td>
-                    <td class="text-right">{{ sal.cu|default:"0.0000"|intcomma }}</td>
+                    <td class="text-right">{% if sal.kg_totales %}{{ sal.kg_totales|formato_cantidad }}{% else %}-{% endif %}</td>
+                    <td class="text-right">{{ sal.costo_asignado|default:"0.00"|formato_moneda:"USD" }}</td>
+                    <td class="text-right">{{ sal.cu|default:"0.000000"|formato_costo }}</td>
                 </tr>
                 {% endfor %}
+                <tr class="group-subtotal">
+                    <td colspan="3" class="text-right"><strong>Subtotal {{ orden.numero }}</strong></td>
+                    <td class="text-right"><strong>{{ orden.mp_total|formato_moneda:"USD" }}</strong></td>
+                    <td colspan="4"></td>
+                    <td class="text-right"><strong>{{ orden.costo_total|formato_moneda:"USD" }}</strong></td>
+                    <td></td>
+                </tr>
             {% else %}
                 <tr>
                     <td>{{ orden.numero }}</td>
                     <td>{{ orden.fecha_apertura|date:"Y-m-d" }}</td>
                     <td>{{ orden.estado }}</td>
-                    <td class="text-right">{{ orden.mp_total|intcomma }}</td>
+                    <td class="text-right">{{ orden.mp_total|formato_moneda:"USD" }}</td>
                     <td colspan="6" class="text-center">Sin salidas registradas</td>
                 </tr>
             {% endif %}
@@ -67,5 +81,16 @@
         </tr>
         {% endfor %}
     </tbody>
+    {% if ordenes %}
+    <tfoot>
+        <tr class="total-row">
+            <td colspan="3" class="text-right"><strong>TOTAL GENERAL</strong></td>
+            <td class="text-right"><strong>{{ total_general_mp|formato_moneda:"USD" }}</strong></td>
+            <td colspan="4"></td>
+            <td class="text-right"><strong>{{ total_general_costo|formato_moneda:"USD" }}</strong></td>
+            <td></td>
+        </tr>
+    </tfoot>
+    {% endif %}
 </table>
 {% endblock %}

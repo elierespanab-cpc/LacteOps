@@ -1,5 +1,5 @@
 {% extends 'reportes/base_reporte.html' %}
-{% load humanize %}
+{% load humanize custom_filters %}
 
 {% block report_title %}
     Reporte de Compras
@@ -15,17 +15,17 @@
         <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
         <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}"></label>
         <br>
-        <label>Proveedores: 
+        <label>Proveedores:
             <select name="proveedor" multiple>
                 {% for p in proveedores %}
-                <option value="{{ p.id }}">{{ p.nombre }}</option>
+                <option value="{{ p.id }}" {% if p.id|stringformat:'s' in proveedor_ids %}selected{% endif %}>{{ p.nombre }}</option>
                 {% endfor %}
             </select>
         </label>
-        <label>Artículos: 
+        <label>ArtÃ­culos:
             <select name="articulo" multiple>
                 {% for p in productos %}
-                <option value="{{ p.id }}">{{ p.nombre }}</option>
+                <option value="{{ p.id }}" {% if p.id|stringformat:'s' in productos_ids %}selected{% endif %}>{{ p.nombre }}</option>
                 {% endfor %}
             </select>
         </label>
@@ -37,7 +37,7 @@
 <table>
     <thead>
         <tr>
-            <th>Número</th>
+            <th>NÃºmero</th>
             <th>Fecha</th>
             <th>Proveedor</th>
             <th>Articulo</th>
@@ -45,49 +45,46 @@
             <th class="text-right">Precio Unit.</th>
             <th class="text-right">Subtotal</th>
             <th class="text-right">Moneda</th>
-            <th class="text-right">Monto USD (aprox)</th>
+            <th class="text-right">Monto USD</th>
+            <th class="text-center">Estatus</th>
             <th class="text-center">Estado</th>
         </tr>
     </thead>
     <tbody>
-        {% regroup detalles by factura.proveedor as prov_group %}
-        {% for grupo in prov_group %}
-            {% if agrupar_por_proveedor %}
-            <tr class="group-header">
-                <td colspan="10">Proveedor: {{ grupo.grouper.nombre }} (RIF: {{ grupo.grouper.rif }})</td>
-            </tr>
-            {% endif %}
-            
-            {% for d in grupo.list %}
+        {% for fila in filas %}
+            {% if fila.tipo == 'detalle' %}
+            {% with d=fila.detalle %}
             <tr>
                 <td>{{ d.factura.numero }}</td>
                 <td>{{ d.factura.fecha|date:"Y-m-d" }}</td>
                 <td>{{ d.factura.proveedor.nombre }}</td>
                 <td>{{ d.producto.codigo }} - {{ d.producto.nombre }}</td>
-                <td class="text-right">{{ d.cantidad|intcomma }}</td>
-                <td class="text-right">{{ d.precio_unitario|intcomma }}</td>
-                <td class="text-right">{{ d.subtotal|intcomma }}</td>
+                <td class="text-right">{{ d.cantidad|formato_cantidad }}</td>
+                <td class="text-right">{{ d.precio_unitario|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ d.subtotal|formato_moneda:d.factura.moneda }}</td>
                 <td class="text-right">{{ d.factura.moneda }}</td>
-                <td class="text-right">
-                    {% if d.factura.moneda == 'USD' %}
-                        {{ d.subtotal|intcomma }}
-                    {% else %}
-                        {% if d.factura.tasa_cambio > 0 %}
-                            {% widthratio d.subtotal d.factura.tasa_cambio 1 as monto_usd_aprox %}
-                            {{ monto_usd_aprox|intcomma }}*
-                        {% else %}
-                            0.00
-                        {% endif %}
-                    {% endif %}
-                </td>
+                <td class="text-right">{{ d.monto_usd|formato_moneda:"USD" }}</td>
+                <td class="text-center">{{ d.estatus_pago }}</td>
                 <td class="text-center">{{ d.factura.estado }}</td>
             </tr>
-            {% endfor %}
+            {% endwith %}
+            {% elif fila.tipo == 'subtotal' and agrupar_por_proveedor %}
+            <tr class="group-subtotal">
+                <td colspan="8" class="text-right"><strong>Subtotal {{ fila.proveedor }}{% if fila.rif %} (RIF: {{ fila.rif }}){% endif %}</strong></td>
+                <td class="text-right"><strong>{{ fila.monto_total|formato_moneda:"USD" }}</strong></td>
+                <td colspan="2"></td>
+            </tr>
+            {% endif %}
         {% empty %}
         <tr>
-            <td colspan="10" class="text-center">No se encontraron registros.</td>
+            <td colspan="11" class="text-center">No se encontraron registros.</td>
         </tr>
         {% endfor %}
+        <tr class="total-row">
+            <td colspan="8" class="text-right"><strong>Total General</strong></td>
+            <td class="text-right"><strong>{{ total_general|formato_moneda:"USD" }}</strong></td>
+            <td colspan="2"></td>
+        </tr>
     </tbody>
 </table>
 {% endblock %}

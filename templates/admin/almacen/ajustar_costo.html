@@ -1,0 +1,25 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block content %}
+  <h1>{{ title }}</h1>
+  <p>Seleccionados:</p>
+  <ul>
+    {% for producto in productos %}
+      <li>{{ producto }}</li>
+    {% empty %}
+      <li>No hay productos seleccionados.</li>
+    {% endfor %}
+  </ul>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {{ form.as_p }}
+    {% for producto in productos %}
+      <input type="hidden" name="_selected_action" value="{{ producto.pk }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="{{ action }}">
+    <input type="hidden" name="apply" value="1">
+    <input type="submit" value="Confirmar" class="default">
+    <a href="{% url opts|admin_urlname:'changelist' %}">Cancelar</a>
+  </form>
+{% endblock %}

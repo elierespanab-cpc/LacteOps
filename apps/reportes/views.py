@@ -21,6 +21,7 @@ from apps.almacen.models import Producto
 from apps.compras.models import GastoServicio as Gs
 from apps.reportes.excel import exportar_excel
 from apps.core.rbac import usuario_en_grupo
+from apps.socios.models import PrestamoPorSocio
 
 
 def _check_reporte_perm(request):
@@ -199,6 +200,17 @@ def reporte_ventas(request):
             parametros=parametros,
         )
 
+    # Filtro post-proceso por estatus cobro
+    estatus_cobro_filtro = request.GET.get("estatus_cobro", "")
+    if estatus_cobro_filtro:
+        filas = [
+            f for f in filas
+            if f["tipo"] == "subtotal" or f["detalle"].estatus_cobro == estatus_cobro_filtro
+        ]
+        total_general = sum(
+            f["detalle"].monto_usd for f in filas if f["tipo"] == "detalle"
+        )
+
     context = {
         "empresa": empresa,
         "fecha_desde": fecha_desde,
@@ -208,6 +220,8 @@ def reporte_ventas(request):
         "total_general": total_general,
         "clientes_ids": clientes_ids,
         "productos_ids": productos_ids,
+        "estados": estados,
+        "estatus_cobro_filtro": estatus_cobro_filtro,
         "clientes": Cliente.objects.all(),
         "productos": Producto.objects.all(),
     }
@@ -246,15 +260,17 @@ def reporte_cxc(request):
     }
 
     for fv in facturas:
+        # B7.1-CxC: usar monto_usd (nunca None, puede ser 0.00) sin filtrar por truthy.
+        # Antes: "if c.monto_usd" omitía cobros VES con monto_usd=0 causando diferencia USD 6.64.
         monto_cobrado = sum(
             Decimal(str(c.monto_usd))
             for c in fv.cobros.all()
-            if c.fecha <= hasta and c.monto_usd
+            if c.fecha <= hasta
         )
         nc_emitidas = sum(
             Decimal(str(nc.total))
             for nc in fv.notas_credito.all()
-            if nc.estado == "EMITIDA" and nc.fecha <= hasta and nc.total
+            if nc.estado == "EMITIDA" and nc.fecha <= hasta and nc.total is not None
         )
         neto_pendiente = max(
             Decimal("0.00"), Decimal(str(fv.total)) - monto_cobrado - nc_emitidas
@@ -504,6 +520,17 @@ def reporte_compras(request):
             parametros=parametros,
         )
 
+    # Filtro post-proceso por estatus pago
+    estatus_pago_filtro = request.GET.get("estatus_pago", "")
+    if estatus_pago_filtro:
+        filas = [
+            f for f in filas
+            if f["tipo"] == "subtotal" or f["detalle"].estatus_pago == estatus_pago_filtro
+        ]
+        total_general = sum(
+            f["detalle"].monto_usd for f in filas if f["tipo"] == "detalle"
+        )
+
     context = {
         "empresa": empresa,
         "fecha_desde": fecha_desde,
@@ -513,6 +540,8 @@ def reporte_compras(request):
         "total_general": total_general,
         "proveedor_ids": proveedor_ids,
         "productos_ids": productos_ids,
+        "estados": estados,
+        "estatus_pago_filtro": estatus_pago_filtro,
         "proveedores": Proveedor.objects.all(),
         "productos": Producto.objects.all(),
     }
@@ -627,6 +656,43 @@ def reporte_cxp(request):
             totales["s_61_90"] += s_61
             totales["s_90_plus"] += s_90
 
+    # Guardar resultados y totales de proveedores para el template
+    resultados_proveedores = resultados
+    totales_proveedores = dict(totales)
+
+    # Sección préstamos de socios
+    from django.db.models import Sum as _Sum
+    prestamos = PrestamoPorSocio.objects.filter(
+        estado='ACTIVO'
+    ).select_related('socio').annotate(
+        total_pagado_p=Coalesce(
+            _Sum('pagos__monto_usd'),
+            Value(Decimal('0.00')),
+            output_field=DecimalField(),
+        )
+    )
+
+    resultados_socios = []
+    total_socios = Decimal('0.00')
+    for p in prestamos:
+        pagado = Decimal(str(p.total_pagado_p))
+        monto_original = Decimal(str(p.monto_usd))
+        saldo = max(Decimal('0.00'), monto_original - pagado)
+        if saldo <= 0:
+            continue
+        resultados_socios.append({
+            'prestamo': p,
+            'socio': p.socio.nombre,
+            'numero': p.numero,
+            'fecha': p.fecha_prestamo,
+            'monto_original': monto_original,
+            'pagado': pagado,
+            'saldo': saldo,
+        })
+        total_socios += saldo
+
+    total_general_cxp = totales_proveedores['pendiente'] + total_socios
+
     parametros = {
         "Fecha corte": fecha_corte or str(hasta),
         "Tipo": tipo_reporte,
@@ -634,12 +700,13 @@ def reporte_cxp(request):
 
     if "exportar" in request.GET:
         columnas = [
-            "Proveedor",
+            "Proveedor / Socio",
             "Tipo Doc.",
             "No. Documento",
             "Vencimiento",
             "Dias Vencida",
             "Monto USD Original",
+            "Monto Pagado USD",
             "Saldo Pendiente USD",
             "0-30 Dias",
             "31-60 Dias",
@@ -666,6 +733,7 @@ def reporte_cxp(request):
                     doc.fecha_vencimiento,
                     item["dias"],
                     monto_original,
+                    "",
                     item["saldo"],
                     item["s_0"],
                     item["s_31"],
@@ -673,6 +741,26 @@ def reporte_cxp(request):
                     item["s_90"],
                 ]
             )
+        # Agregar fila separadora y préstamos de socios
+        filas.append(["--- PRESTAMOS DE SOCIOS ---", "", "", "", "", "", "", "", "", "", "", ""])
+        for item in resultados_socios:
+            filas.append(
+                [
+                    item["socio"],
+                    "Prestamo Socio",
+                    item["numero"],
+                    item["prestamo"].fecha_vencimiento or "",
+                    "",
+                    item["monto_original"],
+                    item["pagado"],
+                    item["saldo"],
+                    "",
+                    "",
+                    "",
+                    "",
+                ]
+            )
+        filas.append(["TOTAL GENERAL CXP", "", "", "", "", "", "", total_general_cxp, "", "", "", ""])
         return exportar_excel(
             "reporte_cxp",
             columnas,
@@ -687,6 +775,11 @@ def reporte_cxp(request):
         "tipo": tipo_reporte,
         "resultados": resultados,
         "totales": totales,
+        "resultados_proveedores": resultados_proveedores,
+        "totales_proveedores": totales_proveedores,
+        "resultados_socios": resultados_socios,
+        "total_socios": total_socios,
+        "total_general_cxp": total_general_cxp,
     }
     return render(request, "reportes/cxp.html", context)
 
@@ -698,6 +791,8 @@ def reporte_produccion(request):
     fecha_desde = request.GET.get("fecha_desde")
     fecha_hasta = request.GET.get("fecha_hasta")
     producto_ids = request.GET.getlist("producto")
+    modo = request.GET.get("modo", "detallado")  # detallado | consolidado
+    mostrar = request.GET.get("mostrar", "ambos")  # ambos | solo_consumos | solo_productos
 
     qs = OrdenProduccion.objects.all()
     if fecha_desde:
@@ -707,28 +802,6 @@ def reporte_produccion(request):
     if producto_ids:
         qs = qs.filter(salidas__producto_id__in=producto_ids).distinct()
 
-    ordenes = list(
-        qs.prefetch_related("salidas__producto__unidad_medida", "consumos").order_by(
-            "-fecha_apertura"
-        )
-    )
-
-    for orden in ordenes:
-        orden.mp_total = sum(c.subtotal for c in orden.consumos.all())
-        for s in orden.salidas.all():
-            if s.producto.unidad_medida.simbolo.lower() == "kg":
-                s.kg_totales = s.cantidad
-            else:
-                if s.producto.peso_unitario_kg:
-                    s.kg_totales = s.cantidad * s.producto.peso_unitario_kg
-                else:
-                    s.kg_totales = None
-
-            if s.cantidad > 0:
-                s.cu = s.costo_asignado / s.cantidad
-            else:
-                s.cu = Decimal("0.00")
-
     parametros = {}
     if fecha_desde:
         parametros["Desde"] = fecha_desde
@@ -736,12 +809,114 @@ def reporte_produccion(request):
         parametros["Hasta"] = fecha_hasta
     if producto_ids:
         parametros["Producto"] = ", ".join(producto_ids)
+    parametros["Modo"] = modo
+    parametros["Mostrar"] = mostrar
 
+    context = {
+        "empresa": empresa,
+        "fecha_desde": fecha_desde,
+        "fecha_hasta": fecha_hasta,
+        "producto_ids": producto_ids,
+        "productos": Producto.objects.filter(activo=True).order_by("codigo"),
+        "modo": modo,
+        "mostrar": mostrar,
+    }
+
+    if modo == "detallado":
+        ordenes = list(
+            qs.prefetch_related(
+                "salidas__producto__unidad_medida",
+                "consumos__producto",
+            ).order_by("-fecha_apertura")
+        )
+        for orden in ordenes:
+            orden.mp_total = sum(c.subtotal for c in orden.consumos.all())
+            for s in orden.salidas.all():
+                if s.producto.unidad_medida.simbolo.lower() == "kg":
+                    s.kg_totales = s.cantidad
+                else:
+                    if s.producto.peso_unitario_kg:
+                        s.kg_totales = s.cantidad * s.producto.peso_unitario_kg
+                    else:
+                        s.kg_totales = None
+                if s.cantidad > 0:
+                    s.cu = s.costo_asignado / s.cantidad
+                else:
+                    s.cu = Decimal("0.00")
+
+        total_general_mp = sum((o.mp_total for o in ordenes), Decimal("0.00"))
+        total_general_costo = sum((o.costo_total for o in ordenes), Decimal("0.00"))
+
+        context.update({
+            "ordenes": ordenes,
+            "total_general_mp": total_general_mp,
+            "total_general_costo": total_general_costo,
+        })
+
+    elif modo == "consolidado":
+        # Consolidar consumos
+        if mostrar in ["ambos", "solo_consumos"]:
+            consumos_consolidados = list(
+                ConsumoOP.objects.filter(orden__in=qs)
+                .values("producto__nombre", "producto__unidad_medida__simbolo")
+                .annotate(
+                    total_cantidad=Sum("cantidad_consumida"),
+                    total_costo=Sum("subtotal"),
+                )
+                .order_by("producto__nombre")
+            )
+            total_consumos_costo = sum(
+                c["total_costo"] or Decimal("0.00") for c in consumos_consolidados
+            )
+            context["consumos_consolidados"] = consumos_consolidados
+            context["total_consumos_costo"] = total_consumos_costo
+
+        # Consolidar productos terminados
+        if mostrar in ["ambos", "solo_productos"]:
+            productos_consolidados = list(
+                SalidaOrden.objects.filter(orden__in=qs)
+                .values("producto__nombre", "producto__unidad_medida__simbolo")
+                .annotate(total_cantidad=Sum("cantidad"))
+                .order_by("producto__nombre")
+            )
+            total_kg_producidos = sum(
+                p["total_cantidad"] or Decimal("0.00") for p in productos_consolidados
+            )
+            context["productos_consolidados"] = productos_consolidados
+            context["total_kg_producidos"] = total_kg_producidos
+
+        # Indicadores consolidados
+        context["total_ordenes"] = qs.count()
+
+    # Export Excel (always uses detallado logic)
     if "exportar" in request.GET:
+        ordenes_exp = list(
+            qs.prefetch_related(
+                "salidas__producto__unidad_medida", "consumos"
+            ).order_by("-fecha_apertura")
+        )
+        for orden in ordenes_exp:
+            orden.mp_total = sum(c.subtotal for c in orden.consumos.all())
+            for s in orden.salidas.all():
+                if s.producto.unidad_medida.simbolo.lower() == "kg":
+                    s.kg_totales = s.cantidad
+                else:
+                    s.kg_totales = (
+                        s.cantidad * s.producto.peso_unitario_kg
+                        if s.producto.peso_unitario_kg
+                        else None
+                    )
+                s.cu = (
+                    s.costo_asignado / s.cantidad
+                    if s.cantidad > 0
+                    else Decimal("0.00")
+                )
+
         columnas = [
             "No. Orden",
             "Fecha",
             "Estado",
+            "Rendimiento Real",
             "Costo Total MP (USD)",
             "Producto Obtenido",
             "Cant. Fisica",
@@ -751,38 +926,32 @@ def reporte_produccion(request):
             "Costo Unitario USD",
         ]
         filas = []
-        for orden in ordenes:
+        for orden in ordenes_exp:
             if orden.salidas.all():
                 for sal in orden.salidas.all():
-                    filas.append(
-                        [
-                            orden.numero,
-                            orden.fecha_apertura,
-                            orden.estado,
-                            orden.mp_total,
-                            f"{sal.producto.nombre}{' (Subprod)' if sal.es_subproducto else ''}",
-                            sal.cantidad,
-                            sal.producto.unidad_medida.simbolo,
-                            sal.kg_totales if sal.kg_totales is not None else "-",
-                            sal.costo_asignado or Decimal("0.00"),
-                            sal.cu or Decimal("0.00"),
-                        ]
-                    )
-            else:
-                filas.append(
-                    [
+                    filas.append([
                         orden.numero,
                         orden.fecha_apertura,
                         orden.estado,
+                        orden.rendimiento_real,
                         orden.mp_total,
-                        "Sin salidas",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                    ]
-                )
+                        f"{sal.producto.nombre}{' (Subprod)' if sal.es_subproducto else ''}",
+                        sal.cantidad,
+                        sal.producto.unidad_medida.simbolo,
+                        sal.kg_totales if sal.kg_totales is not None else "-",
+                        sal.costo_asignado or Decimal("0.00"),
+                        sal.cu or Decimal("0.00"),
+                    ])
+            else:
+                filas.append([
+                    orden.numero,
+                    orden.fecha_apertura,
+                    orden.estado,
+                    orden.rendimiento_real,
+                    orden.mp_total,
+                    "Sin salidas",
+                    "", "", "", "", "",
+                ])
         return exportar_excel(
             "reporte_produccion",
             columnas,
@@ -791,19 +960,6 @@ def reporte_produccion(request):
             parametros=parametros,
         )
 
-    total_general_mp = sum((o.mp_total for o in ordenes), Decimal("0.00"))
-    total_general_costo = sum((o.costo_total for o in ordenes), Decimal("0.00"))
-
-    context = {
-        "empresa": empresa,
-        "fecha_desde": fecha_desde,
-        "fecha_hasta": fecha_hasta,
-        "producto_ids": producto_ids,
-        "productos": Producto.objects.filter(activo=True).order_by("codigo"),
-        "ordenes": ordenes,
-        "total_general_mp": total_general_mp,
-        "total_general_costo": total_general_costo,
-    }
     return render(request, "reportes/produccion.html", context)
 
 

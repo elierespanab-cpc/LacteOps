@@ -173,6 +173,47 @@ def registrar_entrada(producto, cantidad, costo_unitario, referencia, notas=''):
     return movimiento
 
 
+def ajustar_costo_producto(producto, nuevo_costo, motivo, usuario):
+    """
+    Ajusta costo_promedio de forma controlada y auditada.
+
+    No es una entrada física: cantidad=0 marca el movimiento como ajuste de costo puro.
+    Solo debe invocarse por Master/Administrador (el Admin Action en B-1 controla acceso).
+
+    Args:
+        producto   (Producto): Instancia del producto a ajustar.
+        nuevo_costo (Decimal): Nuevo costo promedio en USD.
+        motivo     (str): Descripción del motivo del ajuste.
+        usuario    (User): Usuario que ejecuta la acción (para log).
+
+    Returns:
+        Producto: Instancia actualizada con el nuevo costo_promedio.
+    """
+    from apps.almacen.models import MovimientoInventario, Producto as ProductoModel
+
+    nuevo_costo = Decimal(str(nuevo_costo)).quantize(Decimal('0.000001'))
+
+    with transaction.atomic():
+        prod = ProductoModel.objects.select_for_update().get(pk=producto.pk)
+        costo_anterior = prod.costo_promedio
+        prod.costo_promedio = nuevo_costo
+        prod.save(update_fields=['costo_promedio'])
+
+        MovimientoInventario.objects.create(
+            producto=prod,
+            tipo='ENTRADA',
+            cantidad=Decimal('0'),
+            costo_unitario=nuevo_costo,
+            referencia=f'AJC-{prod.codigo}',
+            notas=f'Ajuste costo: {costo_anterior} -> {nuevo_costo}. Motivo: {motivo}',
+        )
+        logger.info(
+            'Ajuste costo | Producto: %s | %s -> %s | Usuario: %s',
+            prod, costo_anterior, nuevo_costo, usuario,
+        )
+    return prod
+
+
 @transaction.atomic
 def registrar_salida(producto, cantidad, referencia, notas=''):
     """

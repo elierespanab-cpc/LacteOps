@@ -9,7 +9,7 @@
 {% endblock %}
 {% block object-tools-items %}
   {{ block.super }}
-  {% if original and adminform and adminform.model_admin.print_url_name %}
+  {% if original and adminform and adminform.model_admin.print_url_name and show_print_button != False %}
     <li>
       <a class="button" href="{% url adminform.model_admin.print_url_name original.pk %}" target="_blank">Imprimir</a>
     </li>

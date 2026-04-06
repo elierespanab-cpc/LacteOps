@@ -1,0 +1,208 @@
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Capital de Trabajo — {{ empresa.nombre|default:"LacteOps" }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 13px; color: #222; background: #fff; }
+    .report-header { display: flex; justify-content: space-between; align-items: flex-start;
+                     border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 14px; }
+    .report-header .empresa-info h2 { font-size: 17px; }
+    .report-header .empresa-info p  { font-size: 11px; color: #555; }
+    .report-header .titulo-bloque   { text-align: right; }
+    .report-header .titulo-bloque h1 { font-size: 16px; text-transform: uppercase; }
+    .report-header .titulo-bloque p  { font-size: 11px; color: #555; }
+    .filtros-form { background: #f5f5f5; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; }
+    .filtros-form h3 { font-size: 13px; margin-bottom: 8px; }
+    .filtros-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    .filtros-row label { font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px; }
+    .filtros-row select, .filtros-row input { border: 1px solid #ccc; border-radius: 3px;
+                                               padding: 4px 6px; font-size: 12px; }
+    .filtros-row button { background: #2c6fad; color: #fff; border: none; padding: 5px 14px;
+                          border-radius: 3px; cursor: pointer; font-size: 12px; }
+    .filtros-row button:hover { background: #1f5080; }
+    /* Balance sheet layout */
+    .balance { display: flex; gap: 24px; margin-bottom: 24px; }
+    .balance-col { flex: 1; }
+    .balance-col h3 { font-size: 14px; background: #2c6fad; color: #fff; padding: 6px 10px;
+                      margin-bottom: 0; }
+    table { width: 100%; border-collapse: collapse; }
+    .section-row td { background: #dce6f5; font-weight: bold; font-size: 12px; padding: 5px 8px; }
+    .detail-row td { padding: 4px 8px 4px 20px; font-size: 12px; border-bottom: 1px solid #eee; }
+    .total-row td { background: #e8f0fb; font-weight: bold; font-size: 12px; padding: 6px 8px;
+                    border-top: 2px solid #2c6fad; }
+    .grand-total { margin-top: 16px; }
+    .grand-total table { border: 2px solid #2c6fad; }
+    .grand-total .result-row td { background: #2c6fad; color: #fff; font-size: 14px;
+                                   font-weight: bold; padding: 8px 10px; }
+    .result-row.positive td { background: #1e7c1e; }
+    .result-row.negative td { background: #c0392b; }
+    .text-right { text-align: right; }
+    .sub-section { margin-left: 8px; }
+    @media print {
+      .filtros-form, .no-print { display: none !important; }
+      body { font-size: 11px; }
+      .balance-col h3, .result-row td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .section-row td, .total-row td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="report-header">
+  <div class="empresa-info">
+    <h2>{{ empresa.nombre|default:"LacteOps" }}</h2>
+    {% if empresa.rif %}<p>RIF: {{ empresa.rif }}</p>{% endif %}
+    {% if empresa.telefono %}<p>Telf.: {{ empresa.telefono }}</p>{% endif %}
+  </div>
+  <div class="titulo-bloque">
+    <h1>Capital de Trabajo</h1>
+    <p>Fecha de corte: {{ fecha_corte|date:"d/m/Y" }}</p>
+    <p>Inventario valorado a: {{ valorar }}</p>
+    <p>Generado: {% now "d/m/Y H:i" %}</p>
+  </div>
+</div>
+
+<form method="get" class="filtros-form no-print">
+  <h3>Parámetros</h3>
+  <div class="filtros-row">
+    <div>
+      <label>Fecha de corte</label>
+      <input type="date" name="fecha_corte" value="{{ fecha_corte|date:'Y-m-d' }}">
+    </div>
+    <div>
+      <label>Valorar inventario</label>
+      <select name="valorar_inventario">
+        <option value="COSTO" {% if valorar == "COSTO" %}selected{% endif %}>Costo Promedio</option>
+        <option value="VENTA" {% if valorar == "VENTA" %}selected{% endif %}>Precio de Venta</option>
+      </select>
+    </div>
+    <div>
+      <label>Nivel detalle gastos</label>
+      <select name="nivel_detalle">
+        <option value="2" {% if nivel_detalle == 2 %}selected{% endif %}>2 — Subcategorías</option>
+        <option value="1" {% if nivel_detalle == 1 %}selected{% endif %}>1 — Solo categoría padre</option>
+      </select>
+    </div>
+    <div>
+      <button type="submit">Calcular</button>
+      <button type="submit" name="exportar" value="1" style="background:#1e8c1e;margin-left:6px;">Excel</button>
+      <button type="button" onclick="window.print()" style="background:#555;margin-left:6px;">Imprimir</button>
+    </div>
+  </div>
+</form>
+
+<div class="balance">
+  <!-- ACTIVO CORRIENTE -->
+  <div class="balance-col">
+    <h3>Activo Corriente</h3>
+    <table>
+      <tbody>
+        <tr class="section-row"><td>Efectivo y Equivalentes</td><td class="text-right">{{ efectivo|floatformat:2 }}</td></tr>
+        {% for cta in cuentas_efectivo %}
+        <tr class="detail-row">
+          <td style="padding-left:24px;font-size:11px;">
+            {{ cta.nombre }}
+            {% if cta.moneda == "VES" %}
+              <span style="color:#888;">({{ cta.saldo_original|floatformat:2 }} VES ÷ {{ tasa_ves|floatformat:2 }})</span>
+            {% endif %}
+          </td>
+          <td class="text-right" style="font-size:11px;color:#555;">{{ cta.saldo_usd|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="section-row"><td>Cuentas por Cobrar</td><td class="text-right">{{ cxc|floatformat:2 }}</td></tr>
+        <tr class="detail-row"><td colspan="2" style="font-size:11px;color:#666;">Facturas EMITIDAS con saldo pendiente (descuenta NCs emitidas)</td></tr>
+        <tr class="section-row"><td>Inventario ({{ valorar }})</td><td class="text-right">{{ inventario|floatformat:2 }}</td></tr>
+        <tr class="detail-row"><td colspan="2" style="font-size:11px;color:#666;">Productos activos con stock &gt; 0</td></tr>
+      </tbody>
+      <tfoot>
+        <tr class="total-row"><td>Total Activo Corriente</td><td class="text-right">{{ activo_corriente|floatformat:2 }}</td></tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <!-- PASIVO CORRIENTE -->
+  <div class="balance-col">
+    <h3>Pasivo Corriente</h3>
+    <table>
+      <tbody>
+        <tr class="section-row"><td>CxP Compras</td><td class="text-right">{{ cxp_compras|floatformat:2 }}</td></tr>
+        <tr class="detail-row"><td colspan="2" style="font-size:11px;color:#666;">Facturas APROBADAS con saldo pendiente de pago</td></tr>
+        <tr class="section-row"><td>CxP Gastos y Servicios</td><td class="text-right">{{ cxp_gastos|floatformat:2 }}</td></tr>
+        <tr class="detail-row"><td colspan="2" style="font-size:11px;color:#666;">Gastos en estado PENDIENTE</td></tr>
+        <tr class="section-row"><td>Préstamos Socios (corriente)</td><td class="text-right">{{ prestamos_corriente|floatformat:2 }}</td></tr>
+        <tr class="detail-row"><td colspan="2" style="font-size:11px;color:#666;">Vencimiento ≤ 365 días — saldo neto (descontando pagos)</td></tr>
+        <tr class="section-row"><td>Préstamos Socios (no corriente)</td><td class="text-right">{{ prestamos_no_corriente|floatformat:2 }}</td></tr>
+        <tr class="detail-row"><td colspan="2" style="font-size:11px;color:#666;">Sin fecha o vencimiento &gt; 365 días — saldo neto</td></tr>
+      </tbody>
+      <tfoot>
+        <tr class="total-row"><td>Total Pasivo Corriente</td><td class="text-right">{{ pasivo_corriente|floatformat:2 }}</td></tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+<!-- Capital de Trabajo Neto -->
+<div class="grand-total">
+  <table>
+    <tbody>
+      <tr class="result-row {% if capital_neto >= 0 %}positive{% else %}negative{% endif %}">
+        <td>Capital de Trabajo Neto (USD)</td>
+        <td class="text-right">{{ capital_neto|floatformat:2 }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Detalle CxP Gastos -->
+{% if gastos_display_n2 or gastos_display_n1 %}
+<div style="margin-top:24px;">
+  <h3 style="font-size:14px;margin-bottom:8px;border-bottom:1px solid #ccc;padding-bottom:4px;">
+    Detalle CxP Gastos Pendientes
+  </h3>
+  {% if nivel_detalle == 1 %}
+    <table>
+      <thead><tr><th>Categoría</th><th class="text-right">Total USD</th></tr></thead>
+      <tbody>
+        {% for item in gastos_display_n1 %}
+        <tr><td>{{ item.categoria }}</td><td class="text-right">{{ item.total|floatformat:2 }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <table>
+      <thead>
+        <tr><th>Número</th><th>Fecha</th><th>Proveedor</th><th>Descripción</th>
+            <th class="text-right">USD</th></tr>
+      </thead>
+      <tbody>
+        {% for grupo in gastos_display_n2 %}
+          <tr style="background:#2c6fad;color:#fff;font-weight:bold;font-size:12px;">
+            <td colspan="5">{{ grupo.padre }}</td>
+          </tr>
+          {% for sub in grupo.subcategorias %}
+            {% for g in sub.gastos %}
+            <tr>
+              <td>{{ g.numero }}</td>
+              <td>{{ g.fecha_emision|date:"d/m/Y" }}</td>
+              <td>{% if g.proveedor %}{{ g.proveedor.nombre }}{% else %}—{% endif %}</td>
+              <td>{{ g.descripcion|truncatechars:60 }}</td>
+              <td class="text-right">{{ g.monto_usd|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+            <tr style="background:#d4e6f9;font-weight:bold;font-size:12px;">
+              <td colspan="4">Subtotal — {{ sub.subcat }}</td>
+              <td class="text-right">{{ sub.subtotal|floatformat:2 }}</td>
+            </tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</div>
+{% endif %}
+
+</body>
+</html>

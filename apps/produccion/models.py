@@ -68,7 +68,7 @@ class OrdenProduccion(AuditableModel):
 
     numero = models.CharField(max_length=20, unique=True, verbose_name="Número de Orden")
     receta = models.ForeignKey(Receta, on_delete=models.PROTECT, verbose_name="Receta")
-    fecha_apertura = models.DateField(auto_now_add=True, verbose_name="Fecha de Apertura")
+    fecha_apertura = models.DateField(default=date.today, verbose_name="Fecha de Apertura")
     fecha_cierre = models.DateField(null=True, blank=True, verbose_name="Fecha de Cierre")
     estado = models.CharField(max_length=15, choices=ESTADO_CHOICES, default='ABIERTA', verbose_name="Estado")
     costo_total = models.DecimalField(max_digits=18, decimal_places=2, default=0, editable=False, verbose_name="Costo Total (USD)")
@@ -163,14 +163,18 @@ class OrdenProduccion(AuditableModel):
             raise EstadoInvalidoError('Orden de Producción', self.estado, 'cerrar')
 
         from apps.almacen.models import MovimientoInventario
-        movs_existentes = MovimientoInventario.objects.filter(
-            referencia=self.numero
-        ).exists()
-        if movs_existentes:
+        # Un cierre previo genera movimientos con referencia=self.numero.
+        # Un reabrir() los compensa con referencia='REV-{self.numero}'.
+        # Si ambos cuentan igual, los movimientos están balanceados y la OP
+        # fue reabierta limpiamente → permitir cerrar de nuevo.
+        # Solo bloqueamos si hay movimientos del cierre SIN reversión asociada.
+        movs_cierre = MovimientoInventario.objects.filter(referencia=self.numero).count()
+        movs_reversion = MovimientoInventario.objects.filter(referencia=f'REV-{self.numero}').count()
+        if movs_cierre > 0 and movs_cierre != movs_reversion:
             raise EstadoInvalidoError(
                 'Orden de Producción',
                 self.estado,
-                'ya tiene movimientos registrados — posible doble cierre'
+                'ya tiene movimientos registrados sin reversión completa — posible doble cierre'
             )
 
         salidas = list(self.salidas.select_related('producto').all())
@@ -197,13 +201,20 @@ class OrdenProduccion(AuditableModel):
             for consumo in consumos:
                 consumo.producto.refresh_from_db()
 
+                cantidad_requerida = Decimal(str(consumo.cantidad_consumida))
+                if cantidad_requerida <= Decimal('0'):
+                    raise EstadoInvalidoError(
+                        'ConsumoOP',
+                        str(consumo.producto.codigo),
+                        f'cantidad_consumida debe ser mayor que cero (valor actual: {cantidad_requerida})',
+                    )
+
                 if consumo.unidad_medida_id != consumo.producto.unidad_medida_id:
                     raise UnidadIncompatibleError(
                         consumo.unidad_medida.simbolo,
                         consumo.producto.unidad_medida.simbolo,
                     )
                 stock_disponible = Decimal(str(consumo.producto.stock_actual))
-                cantidad_requerida = Decimal(str(consumo.cantidad_consumida))
                 if stock_disponible < cantidad_requerida:
                     raise StockInsuficienteError(
                         consumo.producto.nombre,
@@ -218,7 +229,8 @@ class OrdenProduccion(AuditableModel):
                 consumo.subtotal = (
                     Decimal(str(consumo.cantidad_consumida)) * consumo.costo_unitario
                 )
-                consumo.save(update_fields=['costo_unitario', 'subtotal'])
+                # skip_recalcular=True: no disparar recalculos parciales durante el cierre
+                consumo.save(update_fields=['costo_unitario', 'subtotal'], skip_recalcular=True)
 
                 registrar_salida(
                     producto=consumo.producto,
@@ -249,13 +261,20 @@ class OrdenProduccion(AuditableModel):
                 if i == len(principales_con_valor) - 1:
                     costo_asignado = costo_total - costo_asignado_sum
                 else:
-                    costo_asignado = costo_total * (val_i / valor_total)
+                    if valor_total > Decimal('0'):
+                        costo_asignado = costo_total * (val_i / valor_total)
+                    else:
+                        # Si nadie tiene precio_referencia o es 0, distribuimos equitativamente
+                        costo_asignado = costo_total / Decimal(str(len(principales_con_valor)))
 
                 costo_asignado_sum += costo_asignado
                 s.costo_asignado = costo_asignado
-                s.save(update_fields=['costo_asignado'])
+                s.save(update_fields=['costo_asignado'], skip_recalcular=True)
 
-                costo_unitario_i = costo_asignado / Decimal(str(s.cantidad))
+                if Decimal(str(s.cantidad)) > Decimal('0'):
+                    costo_unitario_i = costo_asignado / Decimal(str(s.cantidad))
+                else:
+                    costo_unitario_i = Decimal('0.000000')
 
                 registrar_entrada(
                     producto=s.producto,
@@ -267,7 +286,7 @@ class OrdenProduccion(AuditableModel):
 
             for s in salidas_subproductos:
                 s.costo_asignado = Decimal('0.000000')
-                s.save(update_fields=['costo_asignado'])
+                s.save(update_fields=['costo_asignado'], skip_recalcular=True)
 
                 registrar_entrada(
                     producto=s.producto,
@@ -278,17 +297,9 @@ class OrdenProduccion(AuditableModel):
                 )
 
             # ── B8: Calcular kg totales de salida y rendimiento real ──────────
-            kg_salida = sum(
-                Decimal(str(s.cantidad)) * Decimal(str(s.producto.peso_unitario_kg or 0))
-                for s in salidas
+            self.kg_totales_salida, self.rendimiento_real = self._calcular_kg_y_rendimiento(
+                consumos, salidas
             )
-            mp_kg = sum(
-                Decimal(str(c.cantidad_consumida)) * Decimal(str(c.producto.peso_unitario_kg or 0))
-                for c in consumos
-            )
-            self.kg_totales_salida = Decimal(str(kg_salida)).quantize(Decimal('0.0001'))
-            if mp_kg > 0:
-                self.rendimiento_real = (kg_salida / mp_kg).quantize(Decimal('0.000001'))
 
             # Cerrar la orden
             self.costo_total = costo_total
@@ -300,6 +311,66 @@ class OrdenProduccion(AuditableModel):
             'OP %s CERRADA. CostoTotal: %s USD. Rendimiento: %s.',
             self.numero, costo_total, self.rendimiento_real
         )
+
+    def _calcular_kg_y_rendimiento(self, consumos, salidas):
+        """
+        Calcula kg totales de salida y rendimiento real para una OP.
+
+        Reglas:
+          - kg_totales_salida: suma directa de cantidad de salidas (todas en Kg).
+          - rendimiento_real: kg_salida / litros_base, donde litros_base es la suma
+            de cantidad_consumida de los consumos cuyo producto tiene
+            es_materia_prima_base=True (siempre en Litros en esta empresa).
+          - La unidad del rendimiento viene de self.receta.unidad_rendimiento:
+              'L/Kg'  → rendimiento = kg_salida / litros_base
+              'Kg/L'  → rendimiento = litros_base / kg_salida
+
+        Returns:
+            tuple(Decimal, Decimal): (kg_totales_salida, rendimiento_real)
+        """
+        kg_salida = sum(
+            (Decimal(str(s.cantidad)) for s in salidas),
+            Decimal('0.0000')
+        ).quantize(Decimal('0.0001'))
+
+        litros_base = sum(
+            (Decimal(str(c.cantidad_consumida))
+             for c in consumos
+             if c.producto.es_materia_prima_base),
+            Decimal('0.0000')
+        )
+
+        unidad = self.receta.unidad_rendimiento  # 'L/Kg' o 'Kg/L'
+
+        if litros_base > Decimal('0') and kg_salida > Decimal('0'):
+            if unidad == 'Kg/L':
+                rendimiento = (kg_salida / litros_base).quantize(Decimal('0.000001'))
+            else:  # 'L/Kg' — litros de materia base consumidos por kg producido
+                rendimiento = (litros_base / kg_salida).quantize(Decimal('0.000001'))
+        else:
+            rendimiento = Decimal('0.000000')
+
+        return kg_salida, rendimiento
+
+    def recalcular_totales(self):
+        """
+        Recalcula costos, kg totales y rendimiento durante previsualización (OP ABIERTA).
+        Se invoca automáticamente desde ConsumoOP.save() y SalidaOrden.save().
+        """
+        if self.estado != 'ABIERTA':
+            return
+
+        consumos = list(self.consumos.select_related('producto').all())
+        salidas = list(self.salidas.select_related('producto').all())
+
+        self.costo_total = sum((c.subtotal for c in consumos), Decimal('0.00'))
+        self.kg_totales_salida, self.rendimiento_real = self._calcular_kg_y_rendimiento(
+            consumos, salidas
+        )
+
+        self.save(update_fields=['costo_total', 'kg_totales_salida', 'rendimiento_real'])
+
+
 
     def reabrir(self, usuario, motivo):
         """
@@ -408,6 +479,49 @@ class ConsumoOP(AuditableModel):
     def __str__(self):
         return f"Consumo OP {self.orden.numero} - {self.producto.codigo}"
 
+    def save(self, *args, **kwargs):
+        # skip_recalcular=True lo pasa cerrar() para no disparar recalculos durante
+        # la transacción atómica (la OP aún está ABIERTA en BD durante el cierre).
+        skip_recalcular = kwargs.pop('skip_recalcular', False)
+
+        # Siempre forzar la unidad de medida del producto — nunca permitir que
+        # difiera, ya que cerrar() valida unidad_consumo == unidad_producto.
+        if self.producto_id:
+            from apps.almacen.models import Producto as Prod
+            prod_data = (
+                Prod.objects
+                .filter(pk=self.producto_id)
+                .values_list('unidad_medida_id', 'costo_promedio')
+                .first()
+            )
+            if prod_data:
+                self.unidad_medida_id = prod_data[0]
+
+        # Solo recalculamos costos en previsualización (OP ABIERTA).
+        if self.orden_id and not skip_recalcular:
+            orden_estado = (
+                OrdenProduccion.objects
+                .filter(pk=self.orden_id)
+                .values_list('estado', flat=True)
+                .first()
+            )
+            if orden_estado == 'ABIERTA':
+                if self.producto_id and prod_data:
+                    self.costo_unitario = Decimal(str(prod_data[1] or '0'))
+                self.subtotal = (
+                    Decimal(str(self.cantidad_consumida)) * self.costo_unitario
+                ).quantize(Decimal('0.01'))
+
+        super().save(*args, **kwargs)
+
+        # Recalcular totales en la OP para previsualización, salvo que lo pida skip_recalcular
+        if self.orden_id and not skip_recalcular:
+            try:
+                OrdenProduccion.objects.get(pk=self.orden_id).recalcular_totales()
+            except OrdenProduccion.DoesNotExist:
+                pass
+
+
 
 class SalidaOrden(AuditableModel):
     orden = models.ForeignKey(OrdenProduccion, related_name='salidas', on_delete=models.CASCADE, verbose_name="Orden")
@@ -423,3 +537,20 @@ class SalidaOrden(AuditableModel):
 
     def __str__(self):
         return f"Salida {self.producto.codigo} OP {self.orden.numero}"
+
+    def save(self, *args, **kwargs):
+        skip_recalcular = kwargs.pop('skip_recalcular', False)
+        super().save(*args, **kwargs)
+        if self.orden_id and not skip_recalcular:
+            orden_estado = (
+                OrdenProduccion.objects
+                .filter(pk=self.orden_id)
+                .values_list('estado', flat=True)
+                .first()
+            )
+            if orden_estado == 'ABIERTA':
+                try:
+                    OrdenProduccion.objects.get(pk=self.orden_id).recalcular_totales()
+                except OrdenProduccion.DoesNotExist:
+                    pass
+

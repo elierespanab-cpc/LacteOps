@@ -5,7 +5,9 @@ from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 
-from apps.produccion.models import Receta, RecetaDetalle, OrdenProduccion, ConsumoOP
+from apps.produccion.models import (
+    Receta, RecetaDetalle, OrdenProduccion, ConsumoOP, SalidaOrden
+)
 from apps.almacen.models import Producto
 from apps.core.exceptions import LacteOpsError
 
@@ -33,29 +35,62 @@ class RecetaAdmin(admin.ModelAdmin):
 class ConsumoOPInline(admin.TabularInline):
     model = ConsumoOP
     extra = 0
-    readonly_fields = ("costo_unitario", "subtotal")
-    # El operador puede ajustar cantidades antes del cierre
-    fields = ("producto", "unidad_medida", "cantidad_consumida", "costo_unitario", "subtotal")
+    # unidad_medida se auto-asigna desde el producto en ConsumoOP.save();
+    # se muestra como readonly para evitar que el usuario ingrese una unidad incorrecta.
+    readonly_fields = ("unidad_medida_display", "costo_unitario", "subtotal")
+    fields = ("producto", "cantidad_consumida", "unidad_medida_display", "costo_unitario", "subtotal")
+
+    def unidad_medida_display(self, obj):
+        if obj.pk and obj.unidad_medida_id:
+            return f"{obj.unidad_medida.simbolo} — {obj.unidad_medida.nombre}"
+        if obj.producto_id:
+            try:
+                return obj.producto.unidad_medida.simbolo
+            except Exception:
+                pass
+        return "—"
+    unidad_medida_display.short_description = "Unidad de Medida"
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "producto":
             kwargs["queryset"] = Producto.objects.filter(activo=True)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-    
+
     def get_extra(self, request, obj=None, **kwargs):
-        if obj is None:
-            return 0
         return 0
+
+
+class SalidaOrdenInline(admin.TabularInline):
+    model = SalidaOrden
+    extra = 0
+    readonly_fields = ("costo_asignado",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "producto":
+            kwargs["queryset"] = Producto.objects.filter(activo=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(OrdenProduccion)
 class OrdenProduccionAdmin(admin.ModelAdmin):
-    inlines = [ConsumoOPInline]
+    inlines = [ConsumoOPInline, SalidaOrdenInline]
     list_display = ("numero", "receta", "fecha_apertura", "fecha_cierre", "estado", "costo_total")
-    readonly_fields = ("fecha_apertura", "fecha_cierre", "costo_total", "estado")
+    readonly_fields = ("fecha_cierre", "costo_total", "estado", "kg_totales_salida", "rendimiento_real")
+    fieldsets = (
+        (None, {"fields": ("numero", "receta", "estado", "notas")}),
+        ("Fechas", {"fields": ("fecha_apertura", "fecha_cierre")}),
+        ("Costos", {"fields": ("costo_total", "kg_totales_salida", "rendimiento_real")}),
+    )
     search_fields = ("numero", "receta__nombre")
     list_filter = ("estado", "fecha_apertura")
     actions = ["cerrar_ordenes", "anular_ordenes", "reabrir_ordenes"]
+
+    def get_readonly_fields(self, request, obj=None):
+        ro = list(self.readonly_fields)
+        if obj and obj.estado == 'CERRADA':
+            if 'fecha_apertura' not in ro:
+                ro.append('fecha_apertura')
+        return tuple(ro)
     
     def get_inline_instances(self, request, obj=None):
         if obj is None:
@@ -128,26 +163,8 @@ class OrdenProduccionAdmin(admin.ModelAdmin):
 
 
 
-# --- Sprint 2: Salidas de Orden y boton imprimir ---
-from apps.produccion.models import SalidaOrden, OrdenProduccion
-
-
-class SalidaOrdenInline(admin.TabularInline):
-    model = SalidaOrden
-    extra = 0
-    readonly_fields = ("costo_asignado",)
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "producto":
-            kwargs["queryset"] = Producto.objects.filter(activo=True)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-
+# --- Sprint 2: Configuración de plantilla y URL de impresión ---
 _orden_admin = admin.site._registry.get(OrdenProduccion)
 if _orden_admin:
-    _inlines = list(getattr(_orden_admin, "inlines", []))
-    if SalidaOrdenInline not in _inlines:
-        _inlines.append(SalidaOrdenInline)
-        _orden_admin.inlines = _inlines
     _orden_admin.change_form_template = "admin/print_change_form.html"
     _orden_admin.print_url_name = "produccion:imprimir_orden_produccion"

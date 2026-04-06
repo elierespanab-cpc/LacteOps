@@ -1,7 +1,11 @@
 import json
 import logging
+from decimal import Decimal
 
+from django import forms
 from django.contrib import admin, messages
+from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
 from apps.almacen.models import (
     Categoria,
     UnidadMedida,
@@ -9,13 +13,16 @@ from apps.almacen.models import (
     MovimientoInventario,
     CambioProducto,
 )
-from apps.almacen.services import recalcular_stock
+from apps.almacen.services import recalcular_stock, ajustar_costo_producto
 from apps.core.rbac import usuario_en_grupo
 from apps.ventas.admin import DetallePorProductoInline
 
 logger = logging.getLogger(__name__)
 
 
+class AjustarCostoForm(forms.Form):
+    nuevo_costo = forms.DecimalField(max_digits=18, decimal_places=6, min_value=Decimal("0"))
+    motivo = forms.CharField(widget=forms.Textarea, required=True)
 
 
 @admin.register(UnidadMedida)
@@ -47,7 +54,16 @@ class ProductoAdmin(admin.ModelAdmin):
     search_fields = ("codigo", "nombre")
     list_filter = ("activo", "es_materia_prima", "es_producto_terminado", "categoria")
     inlines = [DetallePorProductoInline]
-    actions = ["desactivar_productos", "activar_productos", "recalcular_stock_productos"]
+    actions = ["desactivar_productos", "activar_productos", "recalcular_stock_productos", "ajustar_costo"]
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if not (
+            request.user.is_superuser
+            or usuario_en_grupo(request.user, "Master", "Administrador")
+        ):
+            actions.pop("ajustar_costo", None)
+        return actions
 
     def desactivar_productos(self, request, queryset):
         rows_updated = queryset.update(activo=False)
@@ -86,6 +102,48 @@ class ProductoAdmin(admin.ModelAdmin):
     recalcular_stock_productos.short_description = (
         "Recalcular stock y costo promedio (desde Kardex)"
     )
+
+    def ajustar_costo(self, request, queryset):
+        if not (
+            request.user.is_superuser
+            or usuario_en_grupo(request.user, "Master", "Administrador")
+        ):
+            self.message_user(
+                request,
+                "Sin permiso. Solo Master o Administrador pueden ajustar costo.",
+                level=messages.ERROR,
+            )
+            return None
+
+        if request.POST.get("apply"):
+            form = AjustarCostoForm(request.POST)
+            if form.is_valid():
+                nuevo_costo = form.cleaned_data["nuevo_costo"]
+                motivo = form.cleaned_data["motivo"]
+                for prod in queryset:
+                    try:
+                        ajustar_costo_producto(prod, nuevo_costo, motivo, request.user)
+                        messages.success(request, f"Costo ajustado: {prod}")
+                    except Exception as e:
+                        logger.error(
+                            "Error ajustando costo de %s: %s", prod, e, exc_info=True
+                        )
+                        messages.error(request, f"Error en {prod}: {e}")
+                return HttpResponseRedirect(request.get_full_path())
+        else:
+            form = AjustarCostoForm()
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Ajustar costo de productos",
+            "form": form,
+            "productos": queryset,
+            "action": "ajustar_costo",
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/almacen/ajustar_costo.html", context)
+
+    ajustar_costo.short_description = "Ajustar costo de productos seleccionados"
 
     @admin.display(description="Unidad")
     def unidad_medida_simbolo(self, obj):

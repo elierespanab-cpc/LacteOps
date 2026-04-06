@@ -37,13 +37,13 @@ class PrestamoPorSocioAdmin(admin.ModelAdmin):
     @admin.display(description="Pagado USD")
     def monto_pagado_display(self, obj):
         pagado = obj.get_monto_pagado()
-        return format_html('<span style="color:green">{:,.2f}</span>', pagado)
+        return format_html('<span style="color:green">{}</span>', f"{pagado:,.2f}")
 
     @admin.display(description="Saldo USD")
     def saldo_neto_display(self, obj):
         saldo = obj.get_saldo_neto()
         color = "red" if saldo > 0 else "gray"
-        return format_html('<span style="color:{}">{:,.2f}</span>', color, saldo)
+        return format_html('<span style="color:{}">{}</span>', color, f"{saldo:,.2f}")
     readonly_fields = ["numero", "monto_usd"]
     list_filter = ["estado", "moneda", "cuenta_destino"]
     inlines = [PagoPrestamoInline]

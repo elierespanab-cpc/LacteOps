@@ -19,6 +19,7 @@ from datetime import date, timedelta
 from django.contrib.auth.models import User, Permission
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
+from django.test import override_settings
 
 from apps.bancos.models import CuentaBancaria, MovimientoCaja
 from apps.compras.models import FacturaCompra, Pago
@@ -223,6 +224,7 @@ def test_reabrir_requiere_master_o_admin(receta, secuencia_pro):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.django_db
+@override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
 def test_cxp_con_pago_parcial_aparece_en_reporte(client, user_viewer_corr, proveedor):
     """
     Una FacturaCompra APROBADA con un pago parcial debe aparecer en el reporte CxP

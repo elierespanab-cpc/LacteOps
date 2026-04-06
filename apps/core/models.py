@@ -151,6 +151,11 @@ class ConfiguracionEmpresa(models.Model):
         verbose_name='Fecha de venta editable',
         help_text='Si True: usuario ingresa fecha. Si False: fecha del SO al emitir.'
     )
+    permitir_editar_fecha_orden_produccion = models.BooleanField(
+        default=False,
+        verbose_name='Fecha de OP editable',
+        help_text='Si está activo, permite editar fecha_apertura en Orden de Producción.'
+    )
 
     class Meta:
         verbose_name = "Configuración de Empresa"

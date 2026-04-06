@@ -1,0 +1,172 @@
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Reporte de Gastos — {{ empresa.nombre|default:"LacteOps" }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 13px; color: #222; background: #fff; }
+    .report-header { display: flex; justify-content: space-between; align-items: flex-start;
+                     border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 14px; }
+    .report-header .empresa-info h2 { font-size: 17px; }
+    .report-header .empresa-info p  { font-size: 11px; color: #555; }
+    .report-header .titulo-bloque   { text-align: right; }
+    .report-header .titulo-bloque h1 { font-size: 16px; text-transform: uppercase; }
+    .report-header .titulo-bloque p  { font-size: 11px; color: #555; }
+    .filtros-form { background: #f5f5f5; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; }
+    .filtros-form h3 { font-size: 13px; margin-bottom: 8px; }
+    .filtros-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    .filtros-row label { font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px; }
+    .filtros-row select, .filtros-row input { border: 1px solid #ccc; border-radius: 3px;
+                                               padding: 4px 6px; font-size: 12px; }
+    .filtros-row button { background: #2c6fad; color: #fff; border: none; padding: 5px 14px;
+                          border-radius: 3px; cursor: pointer; font-size: 12px; }
+    .filtros-row button:hover { background: #1f5080; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    thead tr th { background: #2c6fad; color: #fff; padding: 6px 8px; font-size: 12px; text-align: left; }
+    tbody tr td { padding: 5px 8px; border-bottom: 1px solid #e0e0e0; font-size: 12px; }
+    tbody tr:nth-child(even) td { background: #f9f9f9; }
+    tfoot tr td { padding: 5px 8px; font-weight: bold; background: #e8f0fb; font-size: 12px; }
+    .text-right { text-align: right; }
+    .subtotal-row td { background: #d4e6f9; font-weight: bold; font-size: 12px; padding: 5px 8px; }
+    .padre-row td { background: #2c6fad; color: #fff; font-weight: bold; font-size: 12px;
+                    padding: 5px 8px; }
+    .empty-msg { text-align: center; color: #888; padding: 20px; font-style: italic; }
+    @media print {
+      .filtros-form, .no-print { display: none !important; }
+      body { font-size: 11px; }
+      thead tr th, .padre-row td { background: #333 !important;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .subtotal-row td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="report-header">
+  <div class="empresa-info">
+    <h2>{{ empresa.nombre|default:"LacteOps" }}</h2>
+    {% if empresa.rif %}<p>RIF: {{ empresa.rif }}</p>{% endif %}
+    {% if empresa.telefono %}<p>Telf.: {{ empresa.telefono }}</p>{% endif %}
+  </div>
+  <div class="titulo-bloque">
+    <h1>Reporte de Gastos y Servicios</h1>
+    <p>Generado: {% now "d/m/Y H:i" %}</p>
+    {% if fecha_desde or fecha_hasta %}
+      <p>{% if fecha_desde %}Desde: {{ fecha_desde }}{% endif %}{% if fecha_hasta %} Hasta: {{ fecha_hasta }}{% endif %}</p>
+    {% endif %}
+  </div>
+</div>
+
+<form method="get" class="filtros-form no-print">
+  <h3>Filtros</h3>
+  <div class="filtros-row">
+    <div>
+      <label>Fecha desde</label>
+      <input type="date" name="fecha_desde" value="{{ fecha_desde|default:'' }}">
+    </div>
+    <div>
+      <label>Fecha hasta</label>
+      <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default:'' }}">
+    </div>
+    <div>
+      <label>Estado</label>
+      <select name="estado">
+        <option value="">Todos</option>
+        <option value="PENDIENTE">Pendiente</option>
+        <option value="PAGADO">Pagado</option>
+        <option value="ANULADO">Anulado</option>
+      </select>
+    </div>
+    <div>
+      <label>Nivel de detalle</label>
+      <select name="nivel_detalle">
+        <option value="2" {% if nivel_detalle == 2 %}selected{% endif %}>2 — Subcategorías</option>
+        <option value="1" {% if nivel_detalle == 1 %}selected{% endif %}>1 — Solo categoría padre</option>
+      </select>
+    </div>
+    <div>
+      <button type="submit">Consultar</button>
+      <button type="submit" name="exportar" value="1" style="background:#1e8c1e;margin-left:6px;">Excel</button>
+      <button type="button" onclick="window.print()" style="background:#555;margin-left:6px;">Imprimir</button>
+    </div>
+  </div>
+</form>
+
+{% if nivel_detalle == 1 %}
+  <!-- Nivel 1: solo totales por categoría padre -->
+  {% if gastos_display_n1 %}
+  <table>
+    <thead><tr><th>Categoría</th><th class="text-right">Total (USD)</th></tr></thead>
+    <tbody>
+      {% for item in gastos_display_n1 %}
+      <tr><td>{{ item.categoria }}</td><td class="text-right">{{ item.total|floatformat:2 }}</td></tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><td>Total General</td><td class="text-right">{{ total_usd|floatformat:2 }}</td></tr>
+    </tfoot>
+  </table>
+  {% else %}
+    <p class="empty-msg">No hay gastos para los filtros seleccionados.</p>
+  {% endif %}
+
+{% else %}
+  <!-- Nivel 2: detalle dentro de cada categoría padre → subcategoría -->
+  {% if gastos_display_n2 %}
+  <table>
+    <thead>
+      <tr>
+        <th>Número</th><th>Fecha</th><th>Proveedor</th><th>Subcategoría</th>
+        <th>Descripción</th><th class="text-right">Monto Original</th>
+        <th>Moneda</th><th class="text-right">Monto USD</th><th>Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for grupo in gastos_display_n2 %}
+        <tr class="padre-row">
+          <td colspan="9">{{ grupo.padre }}</td>
+        </tr>
+        {% for sub in grupo.subcategorias %}
+          {% for g in sub.gastos %}
+          <tr>
+            <td>{{ g.numero }}</td>
+            <td>{{ g.fecha_emision|date:"d/m/Y" }}</td>
+            <td>{% if g.proveedor %}{{ g.proveedor.nombre }}{% else %}—{% endif %}</td>
+            <td>{{ sub.subcat }}</td>
+            <td>{{ g.descripcion|truncatechars:50 }}</td>
+            <td class="text-right">{{ g.monto|floatformat:2 }}</td>
+            <td>{{ g.moneda }}</td>
+            <td class="text-right">{{ g.monto_usd|floatformat:2 }}</td>
+            <td>{{ g.estado }}</td>
+          </tr>
+          {% endfor %}
+          <tr class="subtotal-row">
+            <td colspan="7">Subtotal — {{ sub.subcat }}</td>
+            <td class="text-right">{{ sub.subtotal|floatformat:2 }}</td>
+            <td></td>
+          </tr>
+        {% endfor %}
+        <tr class="subtotal-row" style="background:#b8d4ef;">
+          <td colspan="7"><strong>Subtotal — {{ grupo.padre }}</strong></td>
+          <td class="text-right"><strong>{{ grupo.subtotal|floatformat:2 }}</strong></td>
+          <td></td>
+        </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="7">Total General</td>
+        <td class="text-right">{{ total_usd|floatformat:2 }}</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+  {% else %}
+    <p class="empty-msg">No hay gastos para los filtros seleccionados.</p>
+  {% endif %}
+{% endif %}
+
+</body>
+</html>

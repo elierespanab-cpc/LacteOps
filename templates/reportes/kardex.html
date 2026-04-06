@@ -1,0 +1,298 @@
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ titulo }} — {{ empresa.nombre|default:"LacteOps" }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 13px; color: #222; background: #fff; }
+
+    /* ── Encabezado ── */
+    .report-header { display: flex; justify-content: space-between; align-items: flex-start;
+                     border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 14px; }
+    .report-header .empresa-info h2 { font-size: 17px; }
+    .report-header .empresa-info p  { font-size: 11px; color: #555; }
+    .report-header .titulo-bloque   { text-align: right; }
+    .report-header .titulo-bloque h1 { font-size: 16px; text-transform: uppercase; }
+    .report-header .titulo-bloque p  { font-size: 11px; color: #555; }
+
+    /* ── Filtros ── */
+    .filtros-form { background: #f5f5f5; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; }
+    .filtros-form h3 { font-size: 13px; margin-bottom: 8px; }
+    .filtros-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    .filtros-row label { font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px; }
+    .filtros-row select, .filtros-row input[type=date] {
+        border: 1px solid #ccc; border-radius: 3px; padding: 4px 6px; font-size: 12px; }
+    .filtros-row button { background: #2c6fad; color: #fff; border: none; padding: 5px 14px;
+                          border-radius: 3px; cursor: pointer; font-size: 12px; }
+    .filtros-row button:hover { background: #1f5080; }
+
+    /* ── Tablas ── */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+    thead tr th { background: #2c6fad; color: #fff; padding: 6px 8px; text-align: left; font-size: 12px; }
+    tbody tr td { padding: 5px 8px; border-bottom: 1px solid #e0e0e0; font-size: 12px; }
+    tbody tr:nth-child(even) td { background: #f9f9f9; }
+    tfoot tr td { padding: 5px 8px; font-weight: bold; background: #e8f0fb; font-size: 12px; }
+    .text-right { text-align: right; }
+    .tipo-entrada { color: #1a7e1a; font-weight: bold; }
+    .tipo-salida  { color: #b22222; font-weight: bold; }
+
+    /* ── Subtítulos de grupo ── */
+    .grupo-header td { background: #dce6f5; font-weight: bold; font-size: 12px; }
+    .grupo-total td  { background: #c8d8f0; font-weight: bold; font-size: 12px; }
+
+    /* ── Mensajes ── */
+    .empty-msg { text-align: center; color: #888; padding: 20px 0; font-style: italic; }
+    .info-label { font-size: 11px; color: #555; }
+
+    /* ── Impresión ── */
+    @media print {
+      .filtros-form, .no-print { display: none !important; }
+      body { font-size: 11px; }
+      thead tr th { background: #333 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .grupo-header td, .grupo-total td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      a { text-decoration: none; color: inherit; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Encabezado -->
+<div class="report-header">
+  <div class="empresa-info">
+    <h2>{{ empresa.nombre|default:"LacteOps" }}</h2>
+    {% if empresa.rif %}<p>RIF: {{ empresa.rif }}</p>{% endif %}
+    {% if empresa.telefono %}<p>Telf.: {{ empresa.telefono }}</p>{% endif %}
+    {% if empresa.direccion %}<p>{{ empresa.direccion }}</p>{% endif %}
+  </div>
+  <div class="titulo-bloque">
+    <h1>{{ titulo }}</h1>
+    <p>Generado: {% now "d/m/Y H:i" %}</p>
+    {% if fecha_desde or fecha_hasta %}
+      <p>
+        {% if fecha_desde %}Desde: {{ fecha_desde }}{% endif %}
+        {% if fecha_hasta %} Hasta: {{ fecha_hasta }}{% endif %}
+      </p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Filtros -->
+<form method="get" class="filtros-form no-print">
+  <h3>Filtros</h3>
+  <div class="filtros-row">
+    <div>
+      <label for="id_producto">Producto específico</label>
+      <select name="producto" id="id_producto">
+        <option value="">— Seleccionar producto —</option>
+        {% for p in productos %}
+          <option value="{{ p.pk }}" {% if p.pk|stringformat:"s" == producto_id %}selected{% endif %}>
+            [{{ p.codigo }}] {{ p.nombre }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="id_categoria">Categoría (resumen)</label>
+      <select name="categoria" id="id_categoria">
+        <option value="">— Seleccionar categoría —</option>
+        {% for c in categorias %}
+          <option value="{{ c.pk }}" {% if c.pk|stringformat:"s" == categoria_id %}selected{% endif %}>
+            {{ c.nombre }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="id_fecha_desde">Fecha desde</label>
+      <input type="date" name="fecha_desde" id="id_fecha_desde" value="{{ fecha_desde }}">
+    </div>
+    <div>
+      <label for="id_fecha_hasta">Fecha hasta</label>
+      <input type="date" name="fecha_hasta" id="id_fecha_hasta" value="{{ fecha_hasta }}">
+    </div>
+    <div>
+      <button type="submit">Consultar</button>
+      <button type="button" onclick="window.print()" style="background:#555;margin-left:6px;">Imprimir</button>
+    </div>
+  </div>
+</form>
+
+<!-- ─────────── MODO PRODUCTO: Kardex línea a línea ─────────── -->
+{% if modo == "producto" %}
+  {% if producto_sel %}
+    <p style="margin-bottom:10px;">
+      <strong>Producto:</strong> [{{ producto_sel.codigo }}] {{ producto_sel.nombre }} |
+      <span class="info-label">Categoría: {{ producto_sel.categoria.nombre }} | U/M: {{ producto_sel.unidad_medida.simbolo }}</span>
+    </p>
+
+    {% if lineas_kardex %}
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Tipo</th>
+          <th class="text-right">Cantidad</th>
+          <th class="text-right">Costo Unit.</th>
+          <th>Referencia</th>
+          <th class="text-right">Stock Acum.</th>
+          <th class="text-right">Costo Prom.</th>
+          <th class="text-right">Valor Stock</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lin in lineas_kardex %}
+        <tr>
+          <td>{{ lin.fecha|date:"d/m/Y H:i" }}</td>
+          <td>
+            {% if lin.tipo == "ENTRADA" %}
+              <span class="tipo-entrada">{{ lin.tipo }}</span>
+            {% else %}
+              <span class="tipo-salida">{{ lin.tipo }}</span>
+            {% endif %}
+          </td>
+          <td class="text-right">{{ lin.cantidad|floatformat:4 }}</td>
+          <td class="text-right">{{ lin.costo_unitario|floatformat:6 }}</td>
+          <td>{{ lin.referencia }}</td>
+          <td class="text-right">{{ lin.stock_acumulado|floatformat:4 }}</td>
+          <td class="text-right">{{ lin.costo_promedio|floatformat:6 }}</td>
+          <td class="text-right">{{ lin.valor_stock|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="5">Total movimientos: {{ lineas_kardex|length }}</td>
+          <td class="text-right">{{ lineas_kardex|last|default_if_none:"" }}</td>
+          <td></td>
+          <td class="text-right">
+            {% with lineas_kardex|last as ult %}{{ ult.valor_stock|floatformat:2 }}{% endwith %}
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+    {% else %}
+      <p class="empty-msg">No hay movimientos para el producto y rango de fechas seleccionados.</p>
+    {% endif %}
+  {% else %}
+    <p class="empty-msg">Producto no encontrado.</p>
+  {% endif %}
+
+<!-- ─────────── MODO CATEGORÍA: Resumen por producto ─────────── -->
+{% elif modo == "categoria" %}
+  {% if categoria_sel %}
+    <p style="margin-bottom:10px;"><strong>Categoría:</strong> {{ categoria_sel.nombre }}</p>
+
+    {% if grupos %}
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Producto</th>
+          <th>U/M</th>
+          <th class="text-right">Stock Actual</th>
+          <th class="text-right">Costo Promedio</th>
+          <th class="text-right">Valorizado (USD)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for grupo in grupos %}
+          {% for item in grupo.items %}
+          <tr>
+            <td>{{ item.producto.codigo }}</td>
+            <td>{{ item.producto.nombre }}</td>
+            <td>{{ item.producto.unidad_medida.simbolo }}</td>
+            <td class="text-right">{{ item.stock|floatformat:4 }}</td>
+            <td class="text-right">{{ item.costo_promedio|floatformat:6 }}</td>
+            <td class="text-right">{{ item.valorizado|floatformat:2 }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="empty-msg">Sin productos en esta categoría.</td></tr>
+          {% endfor %}
+          <tr class="grupo-total">
+            <td colspan="5">Subtotal — {{ grupo.categoria.nombre }}</td>
+            <td class="text-right">{{ grupo.subtotal|floatformat:2 }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="5">Total Valorizado</td>
+          <td class="text-right">{{ total_valorizado|floatformat:2 }}</td>
+        </tr>
+      </tfoot>
+    </table>
+    {% else %}
+      <p class="empty-msg">No hay productos en esta categoría.</p>
+    {% endif %}
+  {% else %}
+    <p class="empty-msg">Categoría no encontrada.</p>
+  {% endif %}
+
+<!-- ─────────── MODO TOTALES: Una fila por producto ─────────── -->
+{% elif modo == "totales" %}
+  <p style="margin-bottom:10px;font-size:12px;color:#555;">
+    Resumen agregado por producto. Seleccione un producto para ver el movimiento línea a línea.
+  </p>
+  {% if productos_data %}
+  <table>
+    <thead>
+      <tr>
+        <th rowspan="2">Código</th>
+        <th rowspan="2">Descripción</th>
+        <th rowspan="2">Categoría</th>
+        <th colspan="5" style="text-align:center;background:#1a5fa0;">UNIDADES</th>
+        <th colspan="5" style="text-align:center;background:#17803a;">MONTO USD</th>
+      </tr>
+      <tr>
+        <th class="text-right">Inicial</th>
+        <th class="text-right">Entradas</th>
+        <th class="text-right">Salidas</th>
+        <th class="text-right">Ajustes</th>
+        <th class="text-right">Final</th>
+        <th class="text-right">Inicial</th>
+        <th class="text-right">Entradas</th>
+        <th class="text-right">Salidas</th>
+        <th class="text-right">Ajustes</th>
+        <th class="text-right">Final</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in productos_data %}
+      <tr>
+        <td>{{ p.codigo }}</td>
+        <td>{{ p.descripcion }}</td>
+        <td>{{ p.categoria }}</td>
+        <td class="text-right">{{ p.cant_inicial|floatformat:2 }}</td>
+        <td class="text-right">{{ p.cant_entradas|floatformat:2 }}</td>
+        <td class="text-right">{{ p.cant_salidas|floatformat:2 }}</td>
+        <td class="text-right">{{ p.cant_ajustes|floatformat:2 }}</td>
+        <td class="text-right"><strong>{{ p.cant_final|floatformat:2 }}</strong></td>
+        <td class="text-right">{{ p.monto_inicial|floatformat:2 }}</td>
+        <td class="text-right">{{ p.monto_entradas|floatformat:2 }}</td>
+        <td class="text-right">{{ p.monto_salidas|floatformat:2 }}</td>
+        <td class="text-right">{{ p.monto_ajustes|floatformat:2 }}</td>
+        <td class="text-right"><strong>{{ p.monto_final|floatformat:2 }}</strong></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="13" class="empty-msg">No hay productos activos.</td></tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="12" class="text-right">Total Valorizado:</td>
+        <td class="text-right">{{ total_valorizado|floatformat:2 }}</td>
+      </tr>
+    </tfoot>
+  </table>
+  {% else %}
+    <p class="empty-msg">No hay productos activos.</p>
+  {% endif %}
+
+{% else %}
+  <p class="empty-msg">Sin datos.</p>
+{% endif %}
+
+</body>
+</html>

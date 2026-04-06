@@ -68,5 +68,15 @@
       "prefijo": "SOC-",
       "digitos": 4
     }
+  },
+  {
+    "model": "core.secuencia",
+    "pk": 8,
+    "fields": {
+      "tipo_documento": "NTC",
+      "ultimo_numero": 0,
+      "prefijo": "NTC-",
+      "digitos": 4
+    }
   }
 ]

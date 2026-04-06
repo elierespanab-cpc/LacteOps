@@ -14,4 +14,6 @@ urlpatterns = [
     path('capital_trabajo/', views.reporte_capital_trabajo, name='capital_trabajo'),
     path('stock/', views.reporte_stock, name='stock'),
     path('notificacion/<int:notif_id>/leida/', views.marcar_notificacion_leida, name='notif_leida'),
+    path('kardex/', views.kardex_view, name='kardex'),
+    path('tesoreria/', views.tesoreria_view, name='tesoreria'),
 ]

@@ -1,9 +1,9 @@
 {% extends 'reportes/base_reporte.html' %}
-{% load humanize %}
+{% load humanize custom_filters %}
 
 {% block report_title %}
     Reporte de Capital de Trabajo
-    <br><small>Al corte: {{ fecha_corte|date:"Y-m-d" }} | Valoración de Inventario: {{ valorar }}</small>
+    <br><small>Al corte: {{ fecha_corte|date:"Y-m-d" }} | Valoración de Inventario: {{ valorar }} | Tasa VES: {{ tasa_ves|formato_numero:2 }}</small>
 {% endblock %}
 
 {% block report_content %}
@@ -26,62 +26,73 @@
 </div>
 
 <div style="display: flex; justify-content: space-around; font-size: 14px; margin-bottom: 20px;">
-    
+
     <div style="flex: 1; padding: 10px; border: 1px solid #ccc; margin-right: 10px;">
         <h3 class="text-center">Activo Corriente (USD)</h3>
         <table style="margin-bottom: 0;">
             <tr>
                 <td>Efectivo y Equivalentes</td>
-                <td class="text-right">{{ efectivo|intcomma }}</td>
+                <td class="text-right">{{ efectivo|formato_moneda:"USD" }}</td>
             </tr>
+            {% if cuentas_efectivo %}
+            {% for cta in cuentas_efectivo %}
+            <tr style="font-size: 0.9em; color: #555;">
+                <td style="padding-left: 20px;">{{ cta.nombre }} ({{ cta.moneda }})</td>
+                <td class="text-right">{{ cta.saldo_usd|formato_moneda:"USD" }}</td>
+            </tr>
+            {% endfor %}
+            {% endif %}
             <tr>
                 <td>Cuentas por Cobrar</td>
-                <td class="text-right">{{ cxc|intcomma }}</td>
+                <td class="text-right">{{ cxc|formato_moneda:"USD" }}</td>
             </tr>
             <tr>
                 <td>Inventario (Valorado a {{ valorar }})</td>
-                <td class="text-right">{{ inventario|intcomma }}</td>
+                <td class="text-right">{{ inventario|formato_moneda:"USD" }}</td>
             </tr>
             <tr class="total-row">
-                <td>Total Activo Corriente</td>
-                <td class="text-right">{{ activo_corriente|intcomma }}</td>
+                <td><strong>Total Activo Corriente</strong></td>
+                <td class="text-right"><strong>{{ activo_corriente|formato_moneda:"USD" }}</strong></td>
             </tr>
         </table>
     </div>
-    
+
     <div style="flex: 1; padding: 10px; border: 1px solid #ccc;">
         <h3 class="text-center">Pasivo Corriente (USD)</h3>
         <table style="margin-bottom: 0;">
             <tr>
                 <td>Cuentas por Pagar (Compras)</td>
-                <td class="text-right">{{ cxp_compras|intcomma }}</td>
+                <td class="text-right">{{ cxp_compras|formato_moneda:"USD" }}</td>
             </tr>
             <tr>
                 <td>Cuentas por Pagar (Gastos)</td>
-                <td class="text-right">{{ cxp_gastos|intcomma }}</td>
+                <td class="text-right">{{ cxp_gastos|formato_moneda:"USD" }}</td>
             </tr>
-            <tr style="height: 38px;"> <!-- Filler for alignment with Inventario -->
-                <td></td>
-                <td></td>
+            <tr>
+                <td>Préstamos Socios — Corriente (≤ 12 meses)</td>
+                <td class="text-right">{{ prestamos_corriente|formato_moneda:"USD" }}</td>
             </tr>
             <tr class="total-row">
-                <td>Total Pasivo Corriente</td>
-                <td class="text-right">{{ pasivo_corriente|intcomma }}</td>
+                <td><strong>Total Pasivo Corriente</strong></td>
+                <td class="text-right"><strong>{{ pasivo_corriente|formato_moneda:"USD" }}</strong></td>
+            </tr>
+            <tr>
+                <td style="color: #888; font-size: 0.9em;">Préstamos Socios — No Corriente (informativo)</td>
+                <td class="text-right" style="color: #888; font-size: 0.9em;">{{ prestamos_no_corriente|formato_moneda:"USD" }}</td>
             </tr>
         </table>
     </div>
 
 </div>
 
-
 <div style="margin-top: 20px;">
-    <h3>Gastos por Categoria (USD)</h3>
+    <h3>Gastos por Categoría (USD)</h3>
     {% if nivel_detalle == 1 %}
     <table>
-        <thead><tr><th>Categoria</th><th class="text-right">Total</th></tr></thead>
+        <thead><tr><th>Categoría</th><th class="text-right">Total USD</th></tr></thead>
         <tbody>
-        {% for item in gastos_display %}
-            <tr><td>{{ item.categoria }}</td><td class="text-right">{{ item.total|intcomma }}</td></tr>
+        {% for item in gastos_display_n1 %}
+            <tr><td>{{ item.categoria }}</td><td class="text-right">{{ item.total|formato_moneda:"USD" }}</td></tr>
         {% empty %}
             <tr><td colspan="2" class="text-center">Sin datos</td></tr>
         {% endfor %}
@@ -89,10 +100,27 @@
     </table>
     {% else %}
     <table>
-        <thead><tr><th>Numero</th><th>Categoria</th><th class="text-right">Monto USD</th></tr></thead>
+        <thead><tr><th>Número</th><th>Categoría</th><th class="text-right">Monto USD</th></tr></thead>
         <tbody>
-        {% for g in gastos_display %}
-            <tr><td>{{ g.numero }}</td><td>{{ g.categoria_gasto }}</td><td class="text-right">{{ g.monto_usd|intcomma }}</td></tr>
+        {% for grupo in gastos_display_n2 %}
+            <tr class="group-header"><td colspan="3"><strong>{{ grupo.padre }}</strong></td></tr>
+            {% for subcat_data in grupo.subcategorias %}
+                {% for g in subcat_data.gastos %}
+                <tr>
+                    <td>{{ g.numero }}</td>
+                    <td>{{ g.categoria_gasto }}</td>
+                    <td class="text-right">{{ g.monto_usd|formato_moneda:"USD" }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="group-subtotal">
+                    <td colspan="2" class="text-right"><strong>Subtotal {{ subcat_data.subcat }}:</strong></td>
+                    <td class="text-right"><strong>{{ subcat_data.subtotal|formato_moneda:"USD" }}</strong></td>
+                </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="2" class="text-right"><strong>Total {{ grupo.padre }}:</strong></td>
+                <td class="text-right"><strong>{{ grupo.subtotal|formato_moneda:"USD" }}</strong></td>
+            </tr>
         {% empty %}
             <tr><td colspan="3" class="text-center">Sin datos</td></tr>
         {% endfor %}
@@ -100,7 +128,8 @@
     </table>
     {% endif %}
 </div>
+
 <div style="text-align: center; font-size: 18px; margin-top: 30px; font-weight: bold; padding: 15px; border: 2px solid #555; background-color: #f2f2f2;">
-    Capital de Trabajo Neto: {{ capital_trabajo|intcomma }} USD
+    Capital de Trabajo Neto: {{ capital_trabajo|formato_moneda:"USD" }}
 </div>
 {% endblock %}

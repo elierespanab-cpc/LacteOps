@@ -1,5 +1,5 @@
 {% extends 'reportes/base_reporte.html' %}
-{% load humanize %}
+{% load humanize custom_filters %}
 
 {% block report_title %}
     Reporte de Gastos y Servicios
@@ -14,7 +14,7 @@
     <form method="get">
         <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
         <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}"></label>
-        <label>Categorías: 
+        <label>Categorías:
             <select name="categoria" multiple>
                 {% for c in todas_categorias %}
                 <option value="{{ c }}">{{ c }}</option>
@@ -42,15 +42,15 @@
 <table>
     <thead>
         <tr>
-            <th>Categoria</th>
+            <th>Categoría</th>
             <th class="text-right">Total USD</th>
         </tr>
     </thead>
     <tbody>
-        {% for item in gastos_display %}
+        {% for item in gastos_display_n1 %}
         <tr>
             <td>{{ item.categoria }}</td>
-            <td class="text-right">{{ item.total|intcomma }}</td>
+            <td class="text-right">{{ item.total|formato_moneda:"USD" }}</td>
         </tr>
         {% empty %}
         <tr>
@@ -58,8 +58,8 @@
         </tr>
         {% endfor %}
         <tr class="total-row">
-            <td class="text-right">Total General USD:</td>
-            <td class="text-right">{{ total_usd|intcomma }}</td>
+            <td class="text-right"><strong>Total General USD:</strong></td>
+            <td class="text-right"><strong>{{ total_usd|formato_moneda:"USD" }}</strong></td>
         </tr>
     </tbody>
 </table>
@@ -73,35 +73,42 @@
             <th>Descripción</th>
             <th class="text-right">Monto Original</th>
             <th>Moneda</th>
-            <th class="text-right">Monto USD</th>
+            <th class="text-right">Equiv. USD</th>
             <th class="text-center">Estado</th>
         </tr>
     </thead>
     <tbody>
-        {% regroup gastos by categoria_gasto as cat_group %}
-        {% for grupo in cat_group %}
+        {% for grupo in gastos_display_n2 %}
             <tr class="group-header">
-                <td colspan="8">{{ grupo.grouper }}</td>
+                <td colspan="8"><strong>{{ grupo.padre }}</strong></td>
             </tr>
-            {% for g in grupo.list %}
-            <tr>
-                <td>{{ g.numero }}</td>
-                <td>{{ g.proveedor.nombre }}</td>
-                <td>{{ g.categoria_gasto }}</td>
-                <td>{{ g.descripcion }}</td>
-                <td class="text-right">{{ g.monto|intcomma }}</td>
-                <td>{{ g.moneda }}</td>
-                <td class="text-right">{{ g.monto_usd|intcomma }}</td>
-                <td class="text-center">{{ g.estado }}</td>
-            </tr>
+            {% for subcat_data in grupo.subcategorias %}
+                {% if subcat_data.subcat != grupo.padre %}
+                <tr style="background-color: #f9f9f9;">
+                    <td colspan="8" style="padding-left: 20px;"><em>{{ subcat_data.subcat }}</em></td>
+                </tr>
+                {% endif %}
+                {% for g in subcat_data.gastos %}
+                <tr>
+                    <td>{{ g.numero }}</td>
+                    <td>{{ g.proveedor.nombre }}</td>
+                    <td>{{ g.categoria_gasto }}</td>
+                    <td>{{ g.descripcion }}</td>
+                    <td class="text-right">{{ g.monto|formato_moneda:g.moneda }}</td>
+                    <td>{{ g.moneda }}</td>
+                    <td class="text-right">{{ g.monto_usd|formato_moneda:"USD" }}</td>
+                    <td class="text-center">{{ g.estado }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="group-subtotal">
+                    <td colspan="6" class="text-right"><strong>Subtotal {{ subcat_data.subcat }}:</strong></td>
+                    <td class="text-right"><strong>{{ subcat_data.subtotal|formato_moneda:"USD" }}</strong></td>
+                    <td></td>
+                </tr>
             {% endfor %}
             <tr class="total-row">
-                <td colspan="6" class="text-right">Total {{ grupo.grouper }}:</td>
-                <td class="text-right">
-                    {# This isn't strictly necessary dynamically if we only need general total, but we can do a sum here. Django templates are limited. #}
-                    {# As we pre-calculated general total in python, for subtitles we can skip or use custom tags. A simple general total is standard. #}
-                    -
-                </td>
+                <td colspan="6" class="text-right"><strong>Total {{ grupo.padre }}:</strong></td>
+                <td class="text-right"><strong>{{ grupo.subtotal|formato_moneda:"USD" }}</strong></td>
                 <td></td>
             </tr>
         {% empty %}
@@ -109,13 +116,12 @@
             <td colspan="8" class="text-center">No se encontraron registros.</td>
         </tr>
         {% endfor %}
-        <tr class="total-row">
-            <td colspan="6" class="text-right">Total General USD:</td>
-            <td class="text-right">{{ total_usd|intcomma }}</td>
+        <tr class="total-row" style="font-size: 1.05em;">
+            <td colspan="6" class="text-right"><strong>Total General USD:</strong></td>
+            <td class="text-right"><strong>{{ total_usd|formato_moneda:"USD" }}</strong></td>
             <td></td>
         </tr>
     </tbody>
 </table>
 {% endif %}
 {% endblock %}
-

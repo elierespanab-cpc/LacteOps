@@ -30,7 +30,7 @@ class CuentaBancariaAdmin(admin.ModelAdmin):
     def saldo_formateado(self, obj):
         from django.utils.html import format_html
         saldo = obj.saldo_actual or Decimal("0.00")
-        return format_html('<strong>{:,.2f} {}</strong>', saldo, obj.moneda)
+        return format_html('<strong>{} {}</strong>', f"{saldo:,.2f}", obj.moneda)
 
 
 @admin.register(MovimientoCaja)
