@@ -1,5 +1,5 @@
 {% extends 'reportes/base_reporte.html' %}
-{% load humanize %}
+{% load humanize custom_filters %}
 
 {% block report_title %}
     Reporte de Cuentas por Pagar
@@ -30,7 +30,8 @@
             <th>Vencimiento</th>
             <th class="text-right">Días Vencida</th>
             <th class="text-right">Monto USD Original</th>
-            <th class="text-right">Saldo Pendiente USD</th>
+            <th class="text-right">Monto Pagado USD</th>
+            <th class="text-right">Neto Pendiente USD</th>
             <th class="text-right">0-30 Días</th>
             <th class="text-right">31-60 Días</th>
             <th class="text-right">61-90 Días</th>
@@ -41,7 +42,7 @@
         {% regroup resultados by documento.proveedor as prov_group %}
         {% for grupo in prov_group %}
             <tr class="group-header">
-                <td colspan="11">{{ grupo.grouper.nombre }} (RIF: {{ grupo.grouper.rif }})</td>
+                <td colspan="12">{{ grupo.grouper.nombre }} (RIF: {{ grupo.grouper.rif }})</td>
             </tr>
             {% for item in grupo.list %}
             <tr>
@@ -50,26 +51,27 @@
                 <td>{{ item.documento.numero }}</td>
                 <td>{{ item.documento.fecha_vencimiento|date:"Y-m-d" }}</td>
                 <td class="text-right">{{ item.dias }}</td>
-                <td class="text-right">{% if item.es_gasto %}{{ item.documento.monto_usd|intcomma }}{% else %}{{ item.documento.total_usd|default:item.documento.total|intcomma }}{% endif %}</td>
-                <td class="text-right">{{ item.saldo|intcomma }}</td>
-                <td class="text-right">{{ item.s_0|intcomma }}</td>
-                <td class="text-right">{{ item.s_31|intcomma }}</td>
-                <td class="text-right">{{ item.s_61|intcomma }}</td>
-                <td class="text-right">{{ item.s_90|intcomma }}</td>
+                <td class="text-right">{% if item.es_gasto %}{{ item.documento.monto_usd|formato_moneda:"USD" }}{% else %}{{ item.documento.total_usd|default:item.documento.total|formato_moneda:"USD" }}{% endif %}</td>
+                <td class="text-right">{% if item.es_gasto %}{{ 0|formato_moneda:"USD" }}{% else %}{{ item.documento.total_pagado|formato_moneda:"USD" }}{% endif %}</td>
+                <td class="text-right">{{ item.saldo|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ item.s_0|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ item.s_31|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ item.s_61|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ item.s_90|formato_moneda:"USD" }}</td>
             </tr>
             {% endfor %}
         {% empty %}
         <tr>
-            <td colspan="11" class="text-center">No hay cuentas por pagar a la fecha de corte.</td>
+            <td colspan="12" class="text-center">No hay cuentas por pagar a la fecha de corte.</td>
         </tr>
         {% endfor %}
         <tr class="total-row">
-            <td colspan="6" class="text-right">Total General Pendiente:</td>
-            <td class="text-right">{{ totales.pendiente|intcomma }}</td>
-            <td class="text-right">{{ totales.s_0_30|intcomma }}</td>
-            <td class="text-right">{{ totales.s_31_60|intcomma }}</td>
-            <td class="text-right">{{ totales.s_61_90|intcomma }}</td>
-            <td class="text-right">{{ totales.s_90_plus|intcomma }}</td>
+            <td colspan="7" class="text-right">Total General Pendiente:</td>
+            <td class="text-right">{{ totales.pendiente|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ totales.s_0_30|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ totales.s_31_60|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ totales.s_61_90|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ totales.s_90_plus|formato_moneda:"USD" }}</td>
         </tr>
     </tbody>
 </table>

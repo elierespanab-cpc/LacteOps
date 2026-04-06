@@ -1,0 +1,196 @@
+{% extends 'reportes/base_reporte.html' %}
+{% load humanize custom_filters %}
+
+{% block report_title %}
+    {{ titulo }}
+    {% if fecha_desde or fecha_hasta %}
+    <br><small>
+        {% if fecha_desde %}Desde: {{ fecha_desde }}{% endif %}
+        {% if fecha_hasta %} Hasta: {{ fecha_hasta }}{% endif %}
+    </small>
+    {% endif %}
+{% endblock %}
+
+{% block report_content %}
+<div class="no-print filters">
+    <form method="get">
+        <label>Producto:
+            <select name="producto">
+                <option value="">— Todos —</option>
+                {% for p in productos %}
+                <option value="{{ p.pk }}" {% if p.pk|stringformat:"s" == producto_id %}selected{% endif %}>
+                    [{{ p.codigo }}] {{ p.nombre }}
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Categoría:
+            <select name="categoria">
+                <option value="">— Todas —</option>
+                {% for c in categorias %}
+                <option value="{{ c.pk }}" {% if c.pk|stringformat:"s" == categoria_id %}selected{% endif %}>
+                    {{ c.nombre }}
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde }}"></label>
+        <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta }}"></label>
+        <button type="submit">Consultar</button>
+    </form>
+</div>
+
+{% if modo == "producto" %}
+    {% if producto_sel %}
+    <p><strong>Producto:</strong> [{{ producto_sel.codigo }}] {{ producto_sel.nombre }} |
+       Categoría: {{ producto_sel.categoria.nombre }} | U/M: {{ producto_sel.unidad_medida.simbolo }}</p>
+
+    {% if lineas_kardex %}
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th class="text-right">Cantidad</th>
+                <th class="text-right">Costo Unit.</th>
+                <th>Referencia</th>
+                <th class="text-right">Stock Acum.</th>
+                <th class="text-right">Costo Prom.</th>
+                <th class="text-right">Valor Stock</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lin in lineas_kardex %}
+            <tr>
+                <td>{{ lin.fecha|date:"d/m/Y H:i" }}</td>
+                <td>{{ lin.tipo }}</td>
+                <td class="text-right">{{ lin.cantidad|formato_cantidad }}</td>
+                <td class="text-right">{{ lin.costo_unitario|formato_costo }}</td>
+                <td>{{ lin.referencia }}</td>
+                <td class="text-right">{{ lin.stock_acumulado|formato_cantidad }}</td>
+                <td class="text-right">{{ lin.costo_promedio|formato_costo }}</td>
+                <td class="text-right">{{ lin.valor_stock|formato_moneda:"USD" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="7" class="text-right">Valor Final:</td>
+                <td class="text-right">{% with lineas_kardex|last as ult %}{{ ult.valor_stock|formato_moneda:"USD" }}{% endwith %}</td>
+            </tr>
+        </tfoot>
+    </table>
+    {% else %}
+    <p class="text-center">No hay movimientos para el rango de fechas seleccionado.</p>
+    {% endif %}
+    {% else %}
+    <p class="text-center">Producto no encontrado.</p>
+    {% endif %}
+
+{% elif modo == "categoria" %}
+    {% if categoria_sel %}
+    <p><strong>Categoría:</strong> {{ categoria_sel.nombre }}</p>
+    {% if grupos %}
+    <table>
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Producto</th>
+                <th>U/M</th>
+                <th class="text-right">Stock Actual</th>
+                <th class="text-right">Costo Promedio</th>
+                <th class="text-right">Valorizado (USD)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for grupo in grupos %}
+                {% for item in grupo.items %}
+                <tr>
+                    <td>{{ item.producto.codigo }}</td>
+                    <td>{{ item.producto.nombre }}</td>
+                    <td>{{ item.producto.unidad_medida.simbolo }}</td>
+                    <td class="text-right">{{ item.stock|formato_cantidad }}</td>
+                    <td class="text-right">{{ item.costo_promedio|formato_costo }}</td>
+                    <td class="text-right">{{ item.valorizado|formato_moneda:"USD" }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="total-row">
+                    <td colspan="5" class="text-right">Subtotal {{ grupo.categoria.nombre }}:</td>
+                    <td class="text-right">{{ grupo.subtotal|formato_moneda:"USD" }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="5" class="text-right">Total Valorizado:</td>
+                <td class="text-right">{{ total_valorizado|formato_moneda:"USD" }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    {% else %}
+    <p class="text-center">No hay productos en esta categoría.</p>
+    {% endif %}
+    {% else %}
+    <p class="text-center">Categoría no encontrada.</p>
+    {% endif %}
+
+{% elif modo == "totales" %}
+    <p style="font-size:12px;color:#555;margin-bottom:10px;">
+        Resumen por producto. Seleccione un producto para ver movimiento línea a línea.
+    </p>
+    {% if productos_data %}
+    <table>
+        <thead>
+            <tr>
+                <th rowspan="2">Código</th>
+                <th rowspan="2">Descripción</th>
+                <th rowspan="2">Categoría</th>
+                <th colspan="5" class="text-center">Unidades</th>
+                <th colspan="5" class="text-center">Monto USD</th>
+            </tr>
+            <tr>
+                <th class="text-right">Inicial</th>
+                <th class="text-right">Entradas</th>
+                <th class="text-right">Salidas</th>
+                <th class="text-right">Ajustes</th>
+                <th class="text-right">Final</th>
+                <th class="text-right">Inicial</th>
+                <th class="text-right">Entradas</th>
+                <th class="text-right">Salidas</th>
+                <th class="text-right">Ajustes</th>
+                <th class="text-right">Final</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in productos_data %}
+            <tr>
+                <td>{{ p.codigo }}</td>
+                <td>{{ p.descripcion }}</td>
+                <td>{{ p.categoria }}</td>
+                <td class="text-right">{{ p.cant_inicial|formato_cantidad }}</td>
+                <td class="text-right">{{ p.cant_entradas|formato_cantidad }}</td>
+                <td class="text-right">{{ p.cant_salidas|formato_cantidad }}</td>
+                <td class="text-right">{{ p.cant_ajustes|formato_cantidad }}</td>
+                <td class="text-right"><strong>{{ p.cant_final|formato_cantidad }}</strong></td>
+                <td class="text-right">{{ p.monto_inicial|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ p.monto_entradas|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ p.monto_salidas|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ p.monto_ajustes|formato_moneda:"USD" }}</td>
+                <td class="text-right"><strong>{{ p.monto_final|formato_moneda:"USD" }}</strong></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="13" class="text-center">No hay productos activos.</td></tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="12" class="text-right">Total Valorizado:</td>
+                <td class="text-right">{{ total_valorizado|formato_moneda:"USD" }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    {% else %}
+    <p class="text-center">No hay productos activos.</p>
+    {% endif %}
+{% endif %}
+{% endblock %}

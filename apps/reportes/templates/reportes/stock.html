@@ -1,5 +1,5 @@
 {% extends 'reportes/base_reporte.html' %}
-{% load humanize %}
+{% load humanize custom_filters %}
 
 {% block report_title %}
     Reporte de Stock
@@ -47,12 +47,12 @@
         <tr>
             <td>{{ p.codigo }}</td>
             <td>{{ p.nombre }}</td>
-            <td class="text-right">{{ p.stock_actual|intcomma }}</td>
+            <td class="text-right">{{ p.stock_actual|formato_cantidad }}</td>
             <td class="text-center">{{ p.unidad }}</td>
-            <td class="text-right">{{ p.costo_promedio|intcomma }}</td>
-            <td class="text-right">{{ p.precio_venta|default_if_none:''|intcomma }}</td>
-            <td class="text-right">{{ p.valor_costo|intcomma }}</td>
-            <td class="text-right">{{ p.valor_venta|intcomma }}</td>
+            <td class="text-right">{{ p.costo_promedio|formato_costo }}</td>
+            <td class="text-right">{{ p.precio_venta|default_if_none:''|formato_costo }}</td>
+            <td class="text-right">{{ p.valor_costo|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ p.valor_venta|formato_moneda:"USD" }}</td>
         </tr>
         {% empty %}
         <tr>
@@ -63,8 +63,8 @@
     <tfoot>
         <tr class="total-row">
             <td colspan="6" class="text-right">Totales</td>
-            <td class="text-right">{{ total_costo|intcomma }}</td>
-            <td class="text-right">{{ total_venta|intcomma }}</td>
+            <td class="text-right">{{ total_costo|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ total_venta|formato_moneda:"USD" }}</td>
         </tr>
     </tfoot>
 </table>

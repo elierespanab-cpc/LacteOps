@@ -5,7 +5,14 @@ from decimal import Decimal
 
 from django.contrib import admin, messages
 
-from apps.ventas.models import Cliente, FacturaVenta, DetalleFacturaVenta, Cobro
+from apps.ventas.models import (
+    Cliente,
+    FacturaVenta,
+    DetalleFacturaVenta,
+    Cobro,
+    NotaCredito,
+    DetalleNotaCredito,
+)
 from apps.almacen.models import Producto
 from apps.core.exceptions import LacteOpsError
 
@@ -47,6 +54,18 @@ class DetalleFacturaVentaInline(admin.TabularInline):
 class CobroInline(admin.TabularInline):
     model = Cobro
     extra = 1
+
+
+class DetalleNotaCreditoInline(admin.TabularInline):
+    model = DetalleNotaCredito
+    extra = 3
+    fields = ("producto", "cantidad", "precio_unitario", "subtotal")
+    readonly_fields = ["subtotal"]
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "producto":
+            kwargs["queryset"] = Producto.objects.filter(activo=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(FacturaVenta)
@@ -92,6 +111,22 @@ class FacturaVentaAdmin(admin.ModelAdmin):
         if "moneda" in form.base_fields:
             form.base_fields["moneda"].initial = "USD"
         return form
+
+    change_form_template = "admin/print_change_form.html"
+    print_url_name = "ventas:imprimir_factura_venta"
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id)
+        if obj and obj.estado in ("EMITIDA", "COBRADA"):
+            from apps.almacen.models import MovimientoInventario
+            tiene_movimientos = MovimientoInventario.objects.filter(
+                referencia=obj.numero, tipo="SALIDA"
+            ).exists()
+            extra_context["show_print_button"] = tiene_movimientos
+        else:
+            extra_context["show_print_button"] = False
+        return super().change_view(request, object_id, form_url, extra_context=extra_context)
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}
@@ -198,6 +233,51 @@ class FacturaVentaAdmin(admin.ModelAdmin):
             else:
                 obj.save()
         formset.save_m2m()
+
+
+@admin.register(NotaCredito)
+class NotaCreditoAdmin(admin.ModelAdmin):
+    list_display = ["numero", "fecha", "cliente", "factura_origen", "total", "estado"]
+    list_filter = ["estado", "fecha", "cliente"]
+    search_fields = ["numero", "cliente__nombre", "factura_origen__numero"]
+    readonly_fields = ["numero", "total", "estado", "cliente"]
+    inlines = [DetalleNotaCreditoInline]
+    date_hierarchy = "fecha"
+    actions = ["emitir_notas_credito", "anular_notas_credito"]
+    change_form_template = "admin/print_change_form.html"
+    print_url_name = "ventas:imprimir_nota_credito"
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id)
+        extra_context["show_print_button"] = bool(obj and obj.estado == "EMITIDA")
+        return super().change_view(request, object_id, form_url, extra_context=extra_context)
+
+    def emitir_notas_credito(self, request, queryset):
+        for nc in queryset:
+            try:
+                nc.emitir()
+                messages.success(request, f"Nota de crédito emitida: {nc}")
+            except LacteOpsError as e:
+                messages.error(request, f"Error en {nc}: {e.message}")
+            except Exception as e:
+                logger.error("Error inesperado emitiendo NC %s: %s", nc, e, exc_info=True)
+                messages.error(request, f"Error inesperado en {nc}. Ver logs.")
+
+    emitir_notas_credito.short_description = "Emitir notas de crédito seleccionadas"
+
+    def anular_notas_credito(self, request, queryset):
+        for nc in queryset:
+            try:
+                nc.anular()
+                messages.success(request, f"Nota de crédito anulada: {nc}")
+            except LacteOpsError as e:
+                messages.error(request, f"Error en {nc}: {e.message}")
+            except Exception as e:
+                logger.error("Error inesperado anulando NC %s: %s", nc, e, exc_info=True)
+                messages.error(request, f"Error inesperado en {nc}. Ver logs.")
+
+    anular_notas_credito.short_description = "Anular notas de crédito seleccionadas"
 
 
 # --- CobroAdmin: formulario independiente con bimoneda ---
@@ -312,7 +392,3 @@ class ListaPrecioAdmin(admin.ModelAdmin):
     aprobar_precios.short_description = "Aprobar precios de listas seleccionadas"
 
 
-_factura_admin = admin.site._registry.get(FacturaVenta)
-if _factura_admin:
-    _factura_admin.change_form_template = "admin/print_change_form.html"
-    _factura_admin.print_url_name = "ventas:imprimir_factura_venta"

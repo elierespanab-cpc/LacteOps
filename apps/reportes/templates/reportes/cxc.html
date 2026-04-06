@@ -1,5 +1,5 @@
 {% extends 'reportes/base_reporte.html' %}
-{% load humanize %}
+{% load humanize custom_filters %}
 
 {% block report_title %}
     Reporte de Cuentas por Cobrar
@@ -21,9 +21,11 @@
             <th>No. Factura</th>
             <th>Emisión</th>
             <th>Vencimiento</th>
-            <th class="text-right">Días Vencida</th>
             <th class="text-right">Monto Total</th>
-            <th class="text-right">Saldo Pendiente</th>
+            <th class="text-right">Cobrado</th>
+            <th class="text-right">NC</th>
+            <th class="text-right">Neto Pendiente</th>
+            <th class="text-right">Días Vencida</th>
             <th class="text-right">0-30 Días</th>
             <th class="text-right">31-60 Días</th>
             <th class="text-right">61-90 Días</th>
@@ -34,7 +36,7 @@
         {% regroup resultados by factura.cliente as clientes_group %}
         {% for grupo in clientes_group %}
             <tr class="group-header">
-                <td colspan="11">{{ grupo.grouper.nombre }} (RIF: {{ grupo.grouper.rif }})</td>
+                <td colspan="13">{{ grupo.grouper.nombre }} (RIF: {{ grupo.grouper.rif }})</td>
             </tr>
             {% for item in grupo.list %}
             <tr>
@@ -42,28 +44,33 @@
                 <td>{{ item.factura.numero }}</td>
                 <td>{{ item.factura.fecha|date:"Y-m-d" }}</td>
                 <td>{{ item.factura.fecha_vencimiento|date:"Y-m-d" }}</td>
+                <td class="text-right">{{ item.total|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ item.monto_cobrado|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ item.nc_emitidas|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ item.neto_pendiente|formato_moneda:"USD" }}</td>
                 <td class="text-right">{{ item.dias_vencida }}</td>
-                <td class="text-right">{{ item.factura.total_usd|default:item.factura.total|intcomma }}</td>
-                <td class="text-right">{{ item.saldo|intcomma }}</td>
-                <td class="text-right">{{ item.s_0_30|intcomma }}</td>
-                <td class="text-right">{{ item.s_31_60|intcomma }}</td>
-                <td class="text-right">{{ item.s_61_90|intcomma }}</td>
-                <td class="text-right">{{ item.s_90_plus|intcomma }}</td>
+                <td class="text-right">{{ item.s_0_30|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ item.s_31_60|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ item.s_61_90|formato_moneda:"USD" }}</td>
+                <td class="text-right">{{ item.s_90_plus|formato_moneda:"USD" }}</td>
             </tr>
             {% endfor %}
         {% empty %}
         <tr>
-            <td colspan="11" class="text-center">No hay cuentas por cobrar a la fecha de corte.</td>
+            <td colspan="13" class="text-center">No hay cuentas por cobrar a la fecha de corte.</td>
         </tr>
         {% endfor %}
         <tr class="total-row">
-            <td colspan="5" class="text-right">Total General:</td>
-            <td class="text-right">{{ totales.total|intcomma }}</td>
-            <td class="text-right">{{ totales.pendiente|intcomma }}</td>
-            <td class="text-right">{{ totales.s_0_30|intcomma }}</td>
-            <td class="text-right">{{ totales.s_31_60|intcomma }}</td>
-            <td class="text-right">{{ totales.s_61_90|intcomma }}</td>
-            <td class="text-right">{{ totales.s_90_plus|intcomma }}</td>
+            <td colspan="4" class="text-right">Total General:</td>
+            <td class="text-right">{{ totales.total|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ totales.cobrado|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ totales.nc|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ totales.neto_pendiente|formato_moneda:"USD" }}</td>
+            <td class="text-right"></td>
+            <td class="text-right">{{ totales.s_0_30|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ totales.s_31_60|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ totales.s_61_90|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ totales.s_90_plus|formato_moneda:"USD" }}</td>
         </tr>
     </tbody>
 </table>

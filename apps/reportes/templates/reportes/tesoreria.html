@@ -1,0 +1,115 @@
+{% extends 'reportes/base_reporte.html' %}
+{% load humanize custom_filters %}
+
+{% block report_title %}
+    {{ titulo }}
+    {% if fecha_desde or fecha_hasta %}
+    <br><small>
+        {% if fecha_desde %}Desde: {{ fecha_desde }}{% endif %}
+        {% if fecha_hasta %} Hasta: {{ fecha_hasta }}{% endif %}
+    </small>
+    {% endif %}
+{% endblock %}
+
+{% block report_content %}
+<div class="no-print filters">
+    <form method="get">
+        <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde }}"></label>
+        <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta }}"></label>
+        <label>Cuentas:
+            <select name="cuenta" multiple style="height:70px;">
+                {% for c in cuentas %}
+                <option value="{{ c.pk }}" {% if c.pk|stringformat:"s" in cuentas_ids %}selected{% endif %}>
+                    {{ c.nombre }} ({{ c.moneda }})
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Tipo:
+            <select name="tipo_movimiento" multiple style="height:70px;">
+                {% for t in todos_tipos %}
+                <option value="{{ t }}" {% if t in tipos_sel %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="submit">Consultar</button>
+        <small style="display:block;margin-top:5px;color:#666;">Deje las fechas vacías para ver todos los movimientos históricos.</small>
+    </form>
+</div>
+
+<h3 style="margin-bottom:8px;">Movimientos Consolidados</h3>
+{% if movimientos %}
+<table>
+    <thead>
+        <tr>
+            <th>Fecha</th>
+            <th>Cuenta</th>
+            <th>Origen</th>
+            <th>Tipo</th>
+            <th>Referencia</th>
+            <th>Descripción</th>
+            <th class="text-right">Monto</th>
+            <th>Moneda</th>
+            <th class="text-right">Tasa</th>
+            <th class="text-right">Monto USD</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for m in movimientos %}
+        <tr>
+            <td>{{ m.fecha|date:"d/m/Y" }}</td>
+            <td>{{ m.cuenta.nombre }}</td>
+            <td>{{ m.origen }}</td>
+            <td>{{ m.tipo }}</td>
+            <td>{{ m.referencia }}</td>
+            <td>{{ m.descripcion|truncatechars:50 }}</td>
+            <td class="text-right">{{ m.monto|formato_numero }}</td>
+            <td>{{ m.moneda }}</td>
+            <td class="text-right">{{ m.tasa|floatformat:6 }}</td>
+            <td class="text-right">{{ m.monto_usd|formato_moneda:"USD" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr class="total-row">
+            <td colspan="9" class="text-right">Neto del período (USD):</td>
+            <td class="text-right">{{ total_neto|formato_moneda:"USD" }}</td>
+        </tr>
+    </tfoot>
+</table>
+{% else %}
+<p class="text-center">No hay movimientos. Si espera ver datos históricos, deje las fechas vacías y haga clic en Consultar.</p>
+{% endif %}
+
+{% if resumen %}
+<h3 style="margin-top:20px;margin-bottom:8px;">Resumen por Cuenta Bancaria</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Cuenta</th>
+            <th class="text-right">Entradas (USD)</th>
+            <th class="text-right">Salidas (USD)</th>
+            <th class="text-right">Neto (USD)</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in resumen %}
+        <tr>
+            <td>{{ r.cuenta.nombre }} ({{ r.cuenta.moneda }})</td>
+            <td class="text-right">{{ r.entradas_usd|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ r.salidas_usd|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ r.neto|formato_moneda:"USD" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr class="total-row">
+            <td>Total General</td>
+            <td class="text-right">{{ total_entradas|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ total_salidas|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ total_neto|formato_moneda:"USD" }}</td>
+        </tr>
+    </tfoot>
+</table>
+{% endif %}
+{% endblock %}

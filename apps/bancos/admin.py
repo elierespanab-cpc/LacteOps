@@ -23,13 +23,23 @@ logger = logging.getLogger(__name__)
 
 @admin.register(CuentaBancaria)
 class CuentaBancariaAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "moneda", "saldo_actual", "activa")
+    list_display = ("nombre", "moneda", "saldo_formateado", "activa")
     readonly_fields = ("saldo_actual",)
+
+    @admin.display(description="Saldo Actual")
+    def saldo_formateado(self, obj):
+        from django.utils.html import format_html
+        saldo = obj.saldo_actual or Decimal("0.00")
+        return format_html('<strong>{:,.2f} {}</strong>', saldo, obj.moneda)
 
 
 @admin.register(MovimientoCaja)
 class MovimientoCajaAdmin(admin.ModelAdmin):
-    list_display = ("cuenta", "tipo", "monto", "moneda", "monto_usd", "fecha")
+    list_display = ["fecha", "cuenta", "tipo", "get_origen", "referencia", "monto", "moneda", "monto_usd", "notas"]
+    list_filter = ["cuenta", "tipo", "moneda", "fecha"]
+    search_fields = ["referencia", "notas"]
+    date_hierarchy = "fecha"
+    list_per_page = 50
     readonly_fields = (
         "cuenta",
         "tipo",
@@ -41,6 +51,32 @@ class MovimientoCajaAdmin(admin.ModelAdmin):
         "fecha",
         "notas",
     )
+
+    @admin.display(description="Origen", ordering="referencia")
+    def get_origen(self, obj):
+        ref = obj.referencia or ""
+        notas = obj.notas or ""
+        tipo = obj.tipo
+        if ref.startswith("VTA-") or ref.startswith("FAV-"):
+            return "Cobro Venta"
+        elif ref.startswith("COM-") or ref.startswith("FAC-"):
+            if tipo == "ENTRADA":
+                return "Devolución Proveedor"
+            return "Pago Compra"
+        elif ref.startswith("SOC-"):
+            if tipo == "ENTRADA":
+                return "Préstamo Socio"
+            return "Pago a Socio"
+        elif ref.startswith("NTC-") or ref.startswith("NC-"):
+            return "Nota de Crédito"
+        elif ref.startswith("TES-"):
+            return "Transferencia"
+        elif "Reexpresión" in notas or "Reexpresion" in notas or tipo == "REEXPRESION":
+            return "Reexpresión"
+        elif ref.startswith("AJT-") or "Ajuste" in notas:
+            return "Ajuste Manual"
+        else:
+            return "Manual/Otro"
 
     def has_add_permission(self, request):
         return False

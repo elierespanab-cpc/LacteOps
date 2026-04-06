@@ -345,6 +345,14 @@ class GastoServicio(AuditableModel):
         if self.categoria_gasto and self.categoria_gasto.padre is None:
             from django.core.exceptions import ValidationError
             raise ValidationError('Seleccione una subcategoría, no una categoría padre.')
+        # Calcular monto_usd automáticamente en cada save
+        from decimal import ROUND_HALF_UP as _RHU
+        monto = Decimal(str(self.monto or 0))
+        tasa = Decimal(str(self.tasa_cambio or 1))
+        if self.moneda == 'VES' and tasa > 0:
+            self.monto_usd = (monto / tasa).quantize(Decimal('0.01'), rounding=_RHU)
+        else:
+            self.monto_usd = monto.quantize(Decimal('0.01'), rounding=_RHU)
         super().save(*args, **kwargs)
 
     def pagar(self, cuenta_bancaria, monto, moneda, tasa_cambio):

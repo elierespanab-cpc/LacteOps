@@ -22,6 +22,24 @@ class Socio(AuditableModel):
     def __str__(self):
         return self.nombre
 
+    def get_saldo_bruto(self):
+        """Suma de monto_usd de todos los préstamos ACTIVOS."""
+        from django.db.models import Sum
+        result = self.prestamos.filter(estado='ACTIVO').aggregate(
+            total=Sum('monto_usd')
+        )['total']
+        return result if result is not None else Decimal('0.00')
+
+    def get_saldo_neto(self):
+        """Saldo bruto menos pagos realizados en préstamos ACTIVOS."""
+        from django.db.models import Sum
+        pagos = PagoPrestamo.objects.filter(
+            prestamo__socio=self,
+            prestamo__estado='ACTIVO'
+        ).aggregate(total=Sum('monto_usd'))['total']
+        pagos = pagos if pagos is not None else Decimal('0.00')
+        return max(Decimal('0.00'), self.get_saldo_bruto() - Decimal(str(pagos)))
+
 
 class PrestamoPorSocio(AuditableModel):
     """
@@ -73,6 +91,14 @@ class PrestamoPorSocio(AuditableModel):
 
     def __str__(self):
         return f'{self.numero} — {self.socio}'
+
+    def get_monto_pagado(self):
+        from django.db.models import Sum
+        total = self.pagos.aggregate(total=Sum('monto_usd'))['total']
+        return Decimal(str(total)) if total else Decimal('0.00')
+
+    def get_saldo_neto(self):
+        return max(Decimal('0.00'), Decimal(str(self.monto_usd)) - self.get_monto_pagado())
 
     def save(self, *args, **kwargs):
         if self._state.adding:

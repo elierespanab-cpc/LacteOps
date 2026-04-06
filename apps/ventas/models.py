@@ -15,11 +15,13 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.db import models, transaction
 from django.conf import settings
 
+from django.db.models import Sum
+
 from apps.core.models import AuditableModel, TasaCambio
-from apps.core.exceptions import EstadoInvalidoError
+from apps.core.exceptions import EstadoInvalidoError, StockInsuficienteError
 from apps.core.rbac import usuario_en_grupo
 from apps.almacen.models import Producto, MovimientoInventario
-from apps.almacen.services import registrar_salida
+from apps.almacen.services import registrar_entrada, registrar_salida, convertir_a_usd
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +98,7 @@ class DetalleLista(AuditableModel):
 
 class FacturaVenta(AuditableModel):
     ESTADO_CHOICES = [
+        ('BORRADOR', 'Borrador'),
         ('EMITIDA', 'Emitida'),
         ('COBRADA', 'Cobrada'),
         ('ANULADA', 'Anulada'),
@@ -110,7 +113,7 @@ class FacturaVenta(AuditableModel):
     lista_precio = models.ForeignKey(ListaPrecio, on_delete=models.PROTECT, null=True, verbose_name="Lista de Precios")
     fecha = models.DateField(verbose_name="Fecha")
     fecha_vencimiento = models.DateField(null=True, blank=True, editable=False, verbose_name="Fecha de Vencimiento")
-    estado = models.CharField(max_length=15, choices=ESTADO_CHOICES, default='EMITIDA', verbose_name="Estado")
+    estado = models.CharField(max_length=15, choices=ESTADO_CHOICES, default='BORRADOR', verbose_name="Estado")
     moneda = models.CharField(max_length=3, choices=MONEDA_CHOICES, default='USD', verbose_name="Moneda")
     tasa_cambio = models.DecimalField(max_digits=18, decimal_places=6, default=1.000000, verbose_name="Tasa de Cambio (VES/USD)")
     total = models.DecimalField(max_digits=18, decimal_places=2, default=0, editable=False, verbose_name="Total (USD)")
@@ -128,7 +131,10 @@ class FacturaVenta(AuditableModel):
         total_cobrado = self.cobros.aggregate(
             total=models.Sum('monto')
         )['total'] or Decimal('0.00')
-        return self.total - total_cobrado
+        nc_total = self.notas_credito.filter(estado='EMITIDA').aggregate(
+            total=models.Sum('total')
+        )['total'] or Decimal('0.00')
+        return max(Decimal('0.00'), self.total - Decimal(str(total_cobrado)) - Decimal(str(nc_total)))
 
     def save(self, *args, **kwargs):
         """
@@ -153,9 +159,14 @@ class FacturaVenta(AuditableModel):
     def emitir(self):
         """
         Ejecuta las salidas de inventario para esta factura de venta.
+        Acepta BORRADOR o EMITIDA; si viene de BORRADOR, primero cambia a EMITIDA.
         """
-        if self.estado != 'EMITIDA':
+        if self.estado not in ('BORRADOR', 'EMITIDA'):
             raise EstadoInvalidoError('Factura de Venta', self.estado, 'emitir')
+
+        if self.estado == 'BORRADOR':
+            self.estado = 'EMITIDA'
+            self.save(update_fields=['estado'])
 
         # ── FIX C2: Respetar fecha_venta_abierta ────────────────────────────────
         # Si la configuración no permite edición manual de fecha, forzar fecha SO.
@@ -397,4 +408,118 @@ class Cobro(AuditableModel):
             'Cobro registrado | Factura: %s | Cuenta: %s | Monto: %s %s | USD: %s',
             self.factura.numero, self.cuenta_destino, monto, self.moneda, monto_usd
         )
+
+
+class NotaCredito(AuditableModel):
+    ESTADOS = [('BORRADOR', 'Borrador'), ('EMITIDA', 'Emitida'), ('ANULADA', 'Anulada')]
+    numero = models.CharField(max_length=20, editable=False, default='')
+    factura_origen = models.ForeignKey('FacturaVenta', models.PROTECT, related_name='notas_credito')
+    cliente = models.ForeignKey('Cliente', models.PROTECT, related_name='notas_credito')
+    fecha = models.DateField()
+    moneda = models.CharField(max_length=3, default='USD')
+    tasa_cambio = models.DecimalField(max_digits=18, decimal_places=6, default=Decimal('1.000000'))
+    total = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal('0'))
+    estado = models.CharField(max_length=10, choices=ESTADOS, default='BORRADOR')
+    notas = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = 'Nota de Crédito'
+        verbose_name_plural = 'Notas de Crédito'
+        ordering = ['-fecha', '-id']
+
+    def __str__(self):
+        return f'{self.numero} — {self.cliente}'
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            from apps.core.services import generar_numero
+            if not self.numero:
+                self.numero = generar_numero('NTC')
+            self.cliente = self.factura_origen.cliente
+        super().save(*args, **kwargs)
+
+    def emitir(self):
+        if self.estado != 'BORRADOR':
+            raise EstadoInvalidoError('Nota de Crédito', self.estado, 'emitir')
+        if self.factura_origen.estado not in ('EMITIDA', 'COBRADA'):
+            raise EstadoInvalidoError(
+                'Factura origen', self.factura_origen.estado,
+                'emitir Nota de Crédito (debe estar EMITIDA o COBRADA)')
+
+        with transaction.atomic():
+            for detalle in self.detalles.select_related('producto').select_for_update():
+                # Validar que la cantidad no excede lo facturado menos lo ya devuelto
+                facturado = DetalleFacturaVenta.objects.filter(
+                    factura=self.factura_origen,
+                    producto=detalle.producto
+                ).aggregate(total=Sum('cantidad'))['total'] or Decimal('0')
+
+                ya_devuelto = DetalleNotaCredito.objects.filter(
+                    nota_credito__factura_origen=self.factura_origen,
+                    nota_credito__estado='EMITIDA',
+                    producto=detalle.producto
+                ).exclude(nota_credito=self).aggregate(
+                    total=Sum('cantidad'))['total'] or Decimal('0')
+
+                disponible = Decimal(str(facturado)) - Decimal(str(ya_devuelto))
+                if detalle.cantidad > disponible:
+                    raise StockInsuficienteError(
+                        detalle.producto.nombre, disponible, detalle.cantidad)
+
+                # Reponer inventario al costo promedio vigente (en USD)
+                costo_usd = convertir_a_usd(
+                    detalle.precio_unitario, self.moneda, self.tasa_cambio)
+                registrar_entrada(
+                    producto=detalle.producto,
+                    cantidad=detalle.cantidad,
+                    costo_unitario=costo_usd,
+                    referencia=self.numero,
+                    notas=f'Devolución NC {self.numero}')
+
+            self.estado = 'EMITIDA'
+            self.save(update_fields=['estado'])
+            logger.info('Nota de Crédito %s emitida.', self.numero)
+
+    def anular(self):
+        if self.estado != 'EMITIDA':
+            raise EstadoInvalidoError('Nota de Crédito', self.estado, 'anular')
+
+        with transaction.atomic():
+            for detalle in self.detalles.select_related('producto').select_for_update():
+                # Revertir la entrada de inventario generada al emitir
+                registrar_salida(
+                    producto=detalle.producto,
+                    cantidad=detalle.cantidad,
+                    referencia=self.numero,
+                    notas=f'Anulación NC {self.numero}')
+
+            self.estado = 'ANULADA'
+            self.save(update_fields=['estado'])
+            logger.info('Nota de Crédito %s anulada.', self.numero)
+
+
+class DetalleNotaCredito(models.Model):
+    nota_credito = models.ForeignKey('NotaCredito', models.CASCADE, related_name='detalles')
+    producto = models.ForeignKey('almacen.Producto', models.PROTECT)
+    cantidad = models.DecimalField(max_digits=18, decimal_places=4)
+    precio_unitario = models.DecimalField(max_digits=18, decimal_places=6)
+    subtotal = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal('0'))
+
+    class Meta:
+        verbose_name = 'Detalle Nota de Crédito'
+
+    def __str__(self):
+        return f'{self.producto} x {self.cantidad}'
+
+    def save(self, *args, **kwargs):
+        self.subtotal = (
+            Decimal(str(self.cantidad)) * Decimal(str(self.precio_unitario))
+        ).quantize(Decimal('0.01'))
+        super().save(*args, **kwargs)
+        # Recalcular total de la cabecera
+        total_nc = self.nota_credito.detalles.aggregate(
+            total=models.Sum('subtotal')
+        )['total'] or Decimal('0.00')
+        self.nota_credito.total = Decimal(str(total_nc))
+        self.nota_credito.save(update_fields=['total'])
 
