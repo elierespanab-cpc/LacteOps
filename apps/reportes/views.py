@@ -7,7 +7,7 @@ from django.http import JsonResponse
 from django.db.models import Q, Sum, F, Value, DecimalField
 from django.db.models.functions import Coalesce
 
-from apps.core.models import ConfiguracionEmpresa
+from apps.core.models import ConfiguracionEmpresa, TasaCambio
 from apps.ventas.models import FacturaVenta, Cliente, DetalleFacturaVenta
 from apps.compras.models import (
     FacturaCompra,
@@ -1200,7 +1200,10 @@ def reporte_capital_trabajo(request):
         """Cuantiza a 2 decimales con ROUND_HALF_UP."""
         return Decimal(str(valor)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-    # Obtener tasa de cambio para cuentas VES: usar última reexpresión o fallback
+    # Obtener tasa de cambio para cuentas VES:
+    # 1. última reexpresión cerrada, si existe
+    # 2. última tasa BCV <= fecha de corte
+    # 3. último recurso defensivo: 1.00
     tasa_ves = Decimal("1.00")
     try:
         from apps.bancos.models import PeriodoReexpresado
@@ -1208,6 +1211,14 @@ def reporte_capital_trabajo(request):
         ultimo_periodo = PeriodoReexpresado.objects.order_by("-anio", "-mes").first()
         if ultimo_periodo:
             tasa_ves = Decimal(str(ultimo_periodo.tasa_cierre))
+        else:
+            ultima_tasa = (
+                TasaCambio.objects.filter(fecha__lte=hasta)
+                .order_by("-fecha")
+                .first()
+            )
+            if ultima_tasa:
+                tasa_ves = Decimal(str(ultima_tasa.tasa))
     except Exception:
         pass
 
