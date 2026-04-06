@@ -1,7 +1,9 @@
-﻿import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment
-from django.http import HttpResponse
 from datetime import datetime
+
+import openpyxl
+from django.http import HttpResponse
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 
 
 def exportar_excel(titulo, columnas, filas, filename=None, empresa=None, parametros=None):
@@ -66,8 +68,14 @@ def exportar_excel(titulo, columnas, filas, filename=None, empresa=None, paramet
             ws.cell(row=row, column=ci, value=val)
         row += 1
 
-    for col in ws.columns:
-        ws.column_dimensions[col[0].column_letter].width = 18
+    for idx in range(1, len(columnas) + 1):
+        max_len = len(str(columnas[idx - 1]))
+        for row_cells in ws.iter_rows(min_col=idx, max_col=idx):
+            cell = row_cells[0]
+            if cell.value is not None:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[get_column_letter(idx)].width = min(max(max_len + 2, 14), 40)
+
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )

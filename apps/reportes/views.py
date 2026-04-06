@@ -1593,13 +1593,13 @@ def reporte_stock(request):
 def dashboard(request):
     _check_reporte_perm(request)  # B9
     from apps.reportes.analytics import (
+        construir_graficos_dashboard,
         calcular_cce,
         calcular_precio_ponderado_leche,
         calcular_proyeccion_caja_7d,
-        calcular_score_riesgo,
+        calcular_score_riesgo_activos,
+        obtener_notificaciones_dashboard,
     )
-    from apps.ventas.models import Cliente
-    from apps.core.models import Notificacion
 
     ctx = {"empresa": ConfiguracionEmpresa.objects.first()}
     es_admin = request.user.is_superuser or usuario_en_grupo(
@@ -1609,12 +1609,10 @@ def dashboard(request):
         ctx["cce"] = calcular_cce()
         ctx["proyeccion"] = calcular_proyeccion_caja_7d()
         ctx["precio_leche"] = calcular_precio_ponderado_leche()
-        ctx["scores"] = [
-            {"cliente": c, **calcular_score_riesgo(c)}
-            for c in Cliente.objects.filter(activo=True)
-        ]
+        ctx["scores"] = calcular_score_riesgo_activos()
+        ctx["charts"] = construir_graficos_dashboard()
 
-    notifs = Notificacion.objects.filter(activa=True)
+    notifs = obtener_notificaciones_dashboard()
     leidas = request.session.get("notif_leidas", [])
     ctx.update({"notificaciones": notifs, "notif_leidas": leidas, "es_admin": es_admin})
 
@@ -1627,7 +1625,7 @@ def dashboard(request):
             for item in ctx.get("scores", []):
                 filas.append(
                     [
-                        item["cliente"],
+                        item["cliente"].nombre,
                         item.get("score"),
                         item.get("puntualidad"),
                         item.get("solvencia"),
@@ -1640,7 +1638,7 @@ def dashboard(request):
             for n in notifs:
                 filas.append(
                     [
-                        n.get_tipo_display(),
+                        n.tipo_label,
                         n.titulo,
                         n.mensaje,
                         f"{n.entidad} {n.entidad_id}",
@@ -1987,6 +1985,57 @@ def tesoreria_view(request):
     TIPOS_MC = [t[0] for t in MovimientoCaja.TIPO_CHOICES]
     TIPOS_MT = [t[0] for t in MovimientoTesoreria.TIPOS]
     todos_tipos = sorted(set(TIPOS_MC + TIPOS_MT))
+
+    if "exportar" in request.GET:
+        columnas = [
+            "Fecha",
+            "Cuenta",
+            "Origen",
+            "Tipo",
+            "Referencia",
+            "Descripcion",
+            "Monto",
+            "Monto VES",
+            "Tasa",
+            "Monto USD",
+            "Saldo VES",
+            "Saldo USD",
+        ]
+        filas = [
+            [
+                mov["fecha"],
+                mov["cuenta"].nombre,
+                mov["origen"],
+                mov["tipo"],
+                mov["referencia"],
+                mov["descripcion"],
+                mov["monto"],
+                mov["monto_ves"],
+                mov["tasa"],
+                mov["monto_usd"],
+                mov["saldo_ves"],
+                mov["saldo_usd"],
+            ]
+            for mov in movimientos
+        ]
+        parametros = {}
+        if fecha_desde:
+            parametros["Desde"] = fecha_desde
+        if fecha_hasta:
+            parametros["Hasta"] = fecha_hasta
+        if cuentas_ids:
+            parametros["Cuentas"] = ", ".join(
+                CuentaBancaria.objects.filter(pk__in=cuentas_ids).values_list("nombre", flat=True)
+            )
+        if tipos_sel:
+            parametros["Tipos"] = ", ".join(tipos_sel)
+        return exportar_excel(
+            "reporte_tesoreria",
+            columnas,
+            filas,
+            empresa=empresa,
+            parametros=parametros,
+        )
 
     context = {
         "empresa": empresa,

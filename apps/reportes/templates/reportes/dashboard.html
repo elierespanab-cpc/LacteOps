@@ -1,155 +1,298 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
-{% block title %}Dashboard — {{ block.super }}{% endblock %}
+{% block title %}Dashboard - {{ block.super }}{% endblock %}
 
 {% block extrahead %}
 {{ block.super }}
 <style>
+  .db-shell { display: grid; gap: 22px; }
+  .db-topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .db-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .db-action { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(23, 50, 79, .12); background: #fff; color: #17324d; text-decoration: none; font-weight: 600; cursor: pointer; }
+  .db-action.primary { background: #17324d; color: #fff; }
   .db-header-meta { font-size: 13px; margin: 2px 0 0 0; opacity: .8; }
-  .db-cards { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
-  .db-card { border: 1px solid rgba(128,128,128,.3); padding: 12px 16px; border-radius: 6px; min-width: 160px; }
-  .db-card h4 { margin: 0 0 4px 0; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
-  .db-card .db-value { font-size: 22px; font-weight: bold; }
-  .db-section { margin-top: 24px; }
-  .db-section h2 { font-size: 16px; margin-bottom: 8px; }
-  .db-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-  .db-badge { padding: 3px 10px; border-radius: 12px; color: #fff; font-size: 11px; font-weight: 600; }
-  .db-badge.cxc      { background: #d9534f; }
-  .db-badge.stock    { background: #f0ad4e; }
-  .db-badge.tasa     { background: #0275d8; }
-  .db-badge.prestamo { background: #f57c00; }
-  .score-ok  { color: #2e7d32; font-weight: bold; }
-  .score-mid { color: #f9a825; font-weight: bold; }
-  .score-bad { color: #c62828; font-weight: bold; }
-  @media print { .no-print { display: none; } }
+  .db-grid { display: grid; gap: 16px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .db-panel { background: #fff; border: 1px solid rgba(27, 41, 66, .12); border-radius: 16px; padding: 18px; box-shadow: 0 8px 24px rgba(15, 23, 42, .06); }
+  .db-panel h2, .db-panel h3 { margin: 0 0 12px 0; color: #17324d; }
+  .db-panel h2 { font-size: 18px; }
+  .db-panel h3 { font-size: 15px; }
+  .db-span-12 { grid-column: span 12; }
+  .db-span-8 { grid-column: span 8; }
+  .db-span-6 { grid-column: span 6; }
+  .db-span-4 { grid-column: span 4; }
+  .db-span-3 { grid-column: span 3; }
+  .db-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .db-card { background: linear-gradient(135deg, #f7fafc, #edf3f8); border-radius: 14px; padding: 14px 16px; min-height: 96px; }
+  .db-card h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #5c7288; }
+  .db-card .db-value { font-size: 28px; font-weight: 700; color: #16324f; }
+  .db-card .db-sub { margin-top: 8px; font-size: 12px; color: #60758a; }
+  .db-table { width: 100%; border-collapse: collapse; }
+  .db-table th, .db-table td { padding: 10px 12px; border-bottom: 1px solid rgba(23, 50, 79, .08); vertical-align: top; }
+  .db-table th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #63788d; text-align: left; }
+  .db-table td.right, .db-table th.right { text-align: right; }
+  .db-empty { padding: 18px; border-radius: 12px; background: #f8fafc; color: #64748b; }
+  .db-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .db-badge { padding: 4px 10px; border-radius: 999px; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+  .db-badge.cxc { background: #c2410c; }
+  .db-badge.stock { background: #b45309; }
+  .db-badge.tasa { background: #0369a1; }
+  .db-badge.prestamo { background: #7c3aed; }
+  .db-score-ok { color: #15803d; font-weight: 700; }
+  .db-score-mid { color: #b45309; font-weight: 700; }
+  .db-score-bad { color: #b91c1c; font-weight: 700; }
+  .db-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .db-chart-card { border: 1px solid rgba(23, 50, 79, .08); border-radius: 14px; padding: 14px; background: linear-gradient(180deg, #ffffff, #f8fbfd); }
+  .db-chart-card h3 { margin-bottom: 4px; }
+  .db-chart-sub { font-size: 12px; color: #64748b; margin-bottom: 12px; }
+  .db-chart { width: 100%; height: 260px; display: block; }
+  .db-mini-list { display: grid; gap: 10px; }
+  .db-mini-item { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+  .db-mini-item strong { color: #17324d; }
+  .db-summary-stack { display: grid; gap: 12px; }
+  .db-summary-strip { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .db-pill { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #e2e8f0; color: #334155; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .db-print-note { font-size: 12px; color: #64748b; }
+  @media print {
+    .db-topbar, .btn-leida, .no-print { display: none !important; }
+    .db-panel { box-shadow: none; border: 1px solid #cbd5e1; break-inside: avoid; }
+    body { background: #fff !important; }
+  }
+  @media (max-width: 1100px) {
+    .db-span-8, .db-span-6, .db-span-4, .db-span-3 { grid-column: span 12; }
+    .db-cards, .db-chart-grid, .db-summary-strip { grid-template-columns: 1fr; }
+  }
 </style>
 {% endblock %}
 
 {% block content_title %}
-<h1>Dashboard</h1>
+<h1>Dashboard Ejecutivo</h1>
 {% if empresa %}
-  <p class="db-header-meta">{{ empresa.nombre_empresa }} — {{ empresa.rif }}<br>{{ empresa.direccion }}</p>
+  <p class="db-header-meta">{{ empresa.nombre_empresa }} - {{ empresa.rif }}<br>{{ empresa.direccion }}</p>
 {% endif %}
 {% endblock %}
 
 {% block content %}
-<div class="no-print" style="margin-bottom:14px;">
-  <a href="?exportar=1" class="button">Exportar Excel</a>
-</div>
-
-{# ── Notificaciones ──────────────────────────────────────────────────────── #}
-<div class="db-section">
-  <h2>Notificaciones</h2>
-  <div class="db-badges">
-    <span class="db-badge cxc">CxC</span>
-    <span class="db-badge stock">Stock</span>
-    <span class="db-badge tasa">Tasa</span>
-    <span class="db-badge prestamo">Prestamo</span>
+<div class="db-shell">
+  <div class="db-topbar no-print">
+    <div>
+      <strong>Vista operativa y financiera</strong>
+      <div class="db-header-meta">Primero salud del negocio, luego caja y alertas, después riesgo y tendencias.</div>
+    </div>
+    <div class="db-actions">
+      <button type="button" class="db-action" onclick="window.print()">Exportar PDF</button>
+      <a href="?exportar=1" class="db-action primary">Exportar Excel</a>
+    </div>
   </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Tipo</th><th>Título</th><th>Mensaje</th>
-        <th>Entidad</th><th>Fecha</th><th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for n in notificaciones %}
-        {% if n.id not in notif_leidas %}
-        <tr>
-          <td>
-            {% if n.tipo == 'CXC_VENCIENDO' %}<span class="db-badge cxc">CxC</span>{% endif %}
-            {% if n.tipo == 'STOCK_MINIMO' %}<span class="db-badge stock">Stock</span>{% endif %}
-            {% if n.tipo == 'TASA_NO_CARGADA' %}<span class="db-badge tasa">Tasa</span>{% endif %}
-            {% if n.tipo == 'PRESTAMO_VENCIENDO' %}<span class="db-badge prestamo">Prestamo</span>{% endif %}
-          </td>
-          <td>{{ n.titulo }}</td>
-          <td>{{ n.mensaje }}</td>
-          <td>{{ n.entidad }} {{ n.entidad_id }}</td>
-          <td>{{ n.fecha_referencia }}</td>
-          <td><button data-id="{{ n.id }}" class="btn-leida button">Marcar leída</button></td>
-        </tr>
-        {% endif %}
-      {% empty %}
-        <tr><td colspan="6">No hay notificaciones activas.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
 
-{% if es_admin %}
-{# ── Indicadores ─────────────────────────────────────────────────────────── #}
-<div class="db-section">
-  <h2>Indicadores</h2>
-  <div class="db-cards">
-    <div class="db-card"><h4>CCE</h4><div class="db-value">{{ cce.cce|default:"-" }}</div></div>
-    <div class="db-card"><h4>DSO</h4><div class="db-value">{{ cce.dso|default:"-" }}</div></div>
-    <div class="db-card"><h4>DIO</h4><div class="db-value">{{ cce.dio|default:"-" }}</div></div>
-    <div class="db-card"><h4>DPO</h4><div class="db-value">{{ cce.dpo|default:"-" }}</div></div>
-  </div>
-</div>
+  <div class="db-grid">
+    {% if es_admin %}
+    <section class="db-panel db-span-12">
+      <span class="db-pill">Salud financiera</span>
+      <h2>Resumen ejecutivo</h2>
+      <div class="db-print-note">Lectura rápida del ciclo de caja y presión operativa del negocio.</div>
+      <div class="db-cards">
+        <div class="db-card">
+          <h4>CCE</h4>
+          <div class="db-value">{{ cce.cce|default:"-" }}</div>
+          <div class="db-sub">Capital de caja operativo</div>
+        </div>
+        <div class="db-card">
+          <h4>DSO</h4>
+          <div class="db-value">{{ cce.dso|default:"-" }}</div>
+          <div class="db-sub">Dias promedio de cobro</div>
+        </div>
+        <div class="db-card">
+          <h4>DIO</h4>
+          <div class="db-value">{{ cce.dio|default:"-" }}</div>
+          <div class="db-sub">Dias promedio de inventario</div>
+        </div>
+        <div class="db-card">
+          <h4>DPO</h4>
+          <div class="db-value">{{ cce.dpo|default:"-" }}</div>
+          <div class="db-sub">Dias promedio de pago</div>
+        </div>
+      </div>
+    </section>
 
-{# ── Proyección de Caja ──────────────────────────────────────────────────── #}
-<div class="db-section">
-  <h2>Proyección de Caja — 7 días</h2>
-  <table>
-    <thead>
-      <tr><th>Fecha</th><th style="text-align:right;">Saldo</th></tr>
-    </thead>
-    <tbody>
-      {% for p in proyeccion %}
-        <tr><td>{{ p.fecha }}</td><td style="text-align:right;">{{ p.saldo }}</td></tr>
-      {% empty %}
-        <tr><td colspan="2">Sin datos</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+    <section class="db-panel db-span-8">
+      <span class="db-pill">Caja</span>
+      <h2>Liquidez inmediata</h2>
+      <div class="db-summary-stack">
+        <div class="db-summary-strip">
+          <div class="db-card">
+            <h4>Saldo base USD</h4>
+            <div class="db-value">{{ proyeccion.saldo_usd }}</div>
+          </div>
+          <div class="db-card">
+            <h4>Proyeccion neta 7d</h4>
+            <div class="db-value">{{ proyeccion.proyeccion_neta }}</div>
+          </div>
+          <div class="db-card">
+            <h4>Cobros netos esperados</h4>
+            <div class="db-value">{{ proyeccion.cobros_esperados }}</div>
+            <div class="db-sub">Salidas: {{ proyeccion.pagos_a_vencer }} | Prestamos: {{ proyeccion.prestamos_venciendo }}</div>
+          </div>
+        </div>
+        <div class="db-chart-card">
+          <h3>Serie diaria proyectada</h3>
+          <div class="db-chart-sub">Saldo acumulado en USD para los proximos 7 dias.</div>
+          <svg id="chart-proyeccion" class="db-chart"></svg>
+        </div>
+      </div>
+    </section>
 
-{# ── Precio Ponderado Leche Cruda ────────────────────────────────────────── #}
-<div class="db-section">
-  <h2>Precio Ponderado Leche Cruda</h2>
-  <div class="db-card" style="display:inline-block;">
-    <div class="db-value">{{ precio_leche.precio|default:"-" }}</div>
-    {% if precio_leche.sin_datos_recientes %}
-      <div style="color:#c62828;font-size:12px;margin-top:4px;">Sin datos recientes</div>
+    <section class="db-panel db-span-4">
+      <span class="db-pill">Alertas</span>
+      <h2>Semaforo operativo</h2>
+      <div class="db-badges">
+        <span class="db-badge cxc">CxC</span>
+        <span class="db-badge stock">Stock</span>
+        <span class="db-badge tasa">Tasa</span>
+        <span class="db-badge prestamo">Prestamos</span>
+      </div>
+      <div class="db-mini-list">
+        <div class="db-mini-item"><span>Alertas activas</span><strong>{{ notificaciones|length }}</strong></div>
+        <div class="db-mini-item"><span>Clientes con deuda activa</span><strong>{{ scores|length }}</strong></div>
+        <div class="db-mini-item"><span>Cobros 7 dias</span><strong>{{ proyeccion.cobros_esperados }}</strong></div>
+        <div class="db-mini-item"><span>Salidas 7 dias</span><strong>{{ proyeccion.pagos_a_vencer }}</strong></div>
+      </div>
+      <div class="db-card" style="margin-top: 14px;">
+        <h4>Precio actual de leche</h4>
+        <div class="db-value">{{ precio_leche.precio|default:"-" }}</div>
+        <div class="db-sub">
+          {% if precio_leche.sin_datos_recientes %}
+            Basado en inventario vigente.
+          {% else %}
+            Basado en entradas recientes.
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="db-panel db-span-12">
+      <span class="db-pill">Riesgo y alertas</span>
+      <h2>Detalle de notificaciones</h2>
+      {% if notificaciones %}
+      <table class="db-table">
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th>Titulo</th>
+            <th>Mensaje</th>
+            <th>Entidad</th>
+            <th>Fecha</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for n in notificaciones %}
+            {% if n.id not in notif_leidas %}
+            <tr>
+              <td>
+                {% if n.tipo == 'CXC_VENCIENDO' %}<span class="db-badge cxc">CxC</span>{% endif %}
+                {% if n.tipo == 'STOCK_MINIMO' %}<span class="db-badge stock">Stock</span>{% endif %}
+                {% if n.tipo == 'TASA_NO_CARGADA' %}<span class="db-badge tasa">Tasa</span>{% endif %}
+                {% if n.tipo == 'PRESTAMO_VENCIENDO' %}<span class="db-badge prestamo">Prestamo</span>{% endif %}
+              </td>
+              <td>{{ n.titulo }}</td>
+              <td>{{ n.mensaje }}</td>
+              <td>{{ n.entidad }} {{ n.entidad_id }}</td>
+              <td>{{ n.fecha_referencia|date:"d/m/Y" }}</td>
+              <td>
+                {% if n.persistida %}
+                  <button data-id="{{ n.id }}" class="btn-leida button">Marcar leida</button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="db-empty">No hay alertas activas para mostrar.</div>
+      {% endif %}
+    </section>
+
+    <section class="db-panel db-span-12">
+      <span class="db-pill">Clientes con deuda activa</span>
+      <h2>Score de riesgo</h2>
+      {% if scores %}
+      <table class="db-table">
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th class="right">Deuda activa</th>
+            <th class="right">Score</th>
+            <th class="right">Puntualidad</th>
+            <th class="right">Solvencia</th>
+            <th class="right">Tendencia</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in scores %}
+          <tr>
+            <td>{{ s.cliente }}</td>
+            <td class="right">{{ s.saldo_total }}</td>
+            <td class="right">
+              {% if s.score > 70 %}<span class="db-score-ok">{{ s.score }}</span>
+              {% elif s.score >= 40 %}<span class="db-score-mid">{{ s.score }}</span>
+              {% else %}<span class="db-score-bad">{{ s.score }}</span>{% endif %}
+            </td>
+            <td class="right">{{ s.puntualidad }}</td>
+            <td class="right">{{ s.solvencia }}</td>
+            <td class="right">{{ s.tendencia }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="db-empty">No hay clientes con deuda activa para evaluar riesgo.</div>
+      {% endif %}
+    </section>
+
+    <section class="db-panel db-span-12">
+      <span class="db-pill">Tendencias</span>
+      <h2>Analitica comercial y financiera</h2>
+      <div class="db-chart-grid">
+        <div class="db-chart-card">
+          <h3>Ventas por cliente</h3>
+          <div class="db-chart-sub">Clientes con mayor facturacion acumulada.</div>
+          <svg id="chart-ventas-cliente" class="db-chart"></svg>
+        </div>
+        <div class="db-chart-card">
+          <h3>Tendencia de ventas mensual</h3>
+          <div class="db-chart-sub">Ultimos meses en total facturado.</div>
+          <svg id="chart-ventas-mensual" class="db-chart"></svg>
+        </div>
+        <div class="db-chart-card">
+          <h3>Tendencia de rentabilidad mensual</h3>
+          <div class="db-chart-sub">Ventas menos variacion inventario, compras y gastos.</div>
+          <svg id="chart-rentabilidad" class="db-chart"></svg>
+        </div>
+        <div class="db-chart-card">
+          <h3>Concentracion de cuentas por cobrar</h3>
+          <div class="db-chart-sub">Clientes con mayor saldo pendiente activo.</div>
+          <svg id="chart-cxc" class="db-chart"></svg>
+        </div>
+        <div class="db-chart-card">
+          <h3>Concentracion de cuentas por pagar</h3>
+          <div class="db-chart-sub">Proveedores con mayor exposicion pendiente.</div>
+          <svg id="chart-cxp" class="db-chart"></svg>
+        </div>
+        <div class="db-chart-card">
+          <h3>Rendimiento diario de la leche</h3>
+          <div class="db-chart-sub">Serie diaria de produccion normalizada en L/Kg durante los ultimos 14 dias.</div>
+          <svg id="chart-rendimiento-leche-diario" class="db-chart"></svg>
+        </div>
+      </div>
+    </section>
     {% endif %}
   </div>
 </div>
 
-{# ── Score Riesgo CxC ────────────────────────────────────────────────────── #}
-<div class="db-section">
-  <h2>Score Riesgo CxC</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Cliente</th>
-        <th style="text-align:right;">Score</th>
-        <th style="text-align:right;">Puntualidad</th>
-        <th style="text-align:right;">Solvencia</th>
-        <th style="text-align:right;">Tendencia</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for s in scores %}
-        <tr>
-          <td>{{ s.cliente }}</td>
-          <td style="text-align:right;">
-            {% if s.score > 70 %}<span class="score-ok">{{ s.score }}</span>
-            {% elif s.score >= 40 %}<span class="score-mid">{{ s.score }}</span>
-            {% else %}<span class="score-bad">{{ s.score }}</span>{% endif %}
-          </td>
-          <td style="text-align:right;">{{ s.puntualidad }}</td>
-          <td style="text-align:right;">{{ s.solvencia }}</td>
-          <td style="text-align:right;">{{ s.tendencia }}</td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="5">Sin datos</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+{% if es_admin %}
+{{ charts|json_script:"dashboard-charts-data" }}
 {% endif %}
 
 <script>
@@ -158,6 +301,7 @@
     const parts = value.split(`; ${name}=`);
     if (parts.length === 2) return parts.pop().split(';').shift();
   }
+
   document.querySelectorAll('.btn-leida').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const id = btn.getAttribute('data-id');
@@ -167,6 +311,142 @@
       });
       btn.closest('tr').remove();
     });
+  });
+
+  function formatMoney(value) {
+    return new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value || 0);
+  }
+
+  function clearSvg(svg) {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+  }
+
+  function addText(svg, x, y, text, anchor = 'start', size = 11, color = '#64748b', weight = '400') {
+    const node = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    node.setAttribute('x', x);
+    node.setAttribute('y', y);
+    node.setAttribute('text-anchor', anchor);
+    node.setAttribute('font-size', size);
+    node.setAttribute('font-family', 'Segoe UI, sans-serif');
+    node.setAttribute('fill', color);
+    node.setAttribute('font-weight', weight);
+    node.textContent = text;
+    svg.appendChild(node);
+  }
+
+  function renderBarChart(svgId, labels, values, color) {
+    const svg = document.getElementById(svgId);
+    if (!svg || !labels || !labels.length) return;
+    clearSvg(svg);
+    const width = svg.clientWidth || 520;
+    const height = svg.clientHeight || 260;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    const left = 18;
+    const top = 20;
+    const chartWidth = width - left - 140;
+    const rowHeight = Math.max(20, Math.floor((height - top - 18) / labels.length));
+    const maxValue = Math.max(...values, 1);
+    labels.forEach((label, idx) => {
+      const y = top + idx * rowHeight;
+      const barWidth = chartWidth * ((values[idx] || 0) / maxValue);
+      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bg.setAttribute('x', left);
+      bg.setAttribute('y', y);
+      bg.setAttribute('width', chartWidth);
+      bg.setAttribute('height', rowHeight - 6);
+      bg.setAttribute('rx', 8);
+      bg.setAttribute('fill', '#edf2f7');
+      svg.appendChild(bg);
+      const bar = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bar.setAttribute('x', left);
+      bar.setAttribute('y', y);
+      bar.setAttribute('width', Math.max(barWidth, 4));
+      bar.setAttribute('height', rowHeight - 6);
+      bar.setAttribute('rx', 8);
+      bar.setAttribute('fill', color);
+      svg.appendChild(bar);
+      addText(svg, left + 10, y + (rowHeight / 2), label, 'start', 11, '#17324d', '600');
+      addText(svg, width - 12, y + (rowHeight / 2), formatMoney(values[idx]), 'end', 11, '#17324d', '600');
+    });
+  }
+
+  function renderLineChart(svgId, labels, values, color, fillColor) {
+    const svg = document.getElementById(svgId);
+    if (!svg || !labels || !labels.length) return;
+    clearSvg(svg);
+    const width = svg.clientWidth || 520;
+    const height = svg.clientHeight || 260;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    const left = 42;
+    const right = 18;
+    const top = 18;
+    const bottom = 40;
+    const plotWidth = width - left - right;
+    const plotHeight = height - top - bottom;
+    const maxValue = Math.max(...values, 0);
+    const minValue = Math.min(...values, 0);
+    const spread = Math.max(maxValue - minValue, 1);
+    const points = values.map((value, idx) => {
+      const x = left + (plotWidth * idx / Math.max(labels.length - 1, 1));
+      const y = top + plotHeight - (((value - minValue) / spread) * plotHeight);
+      return { x, y, value, label: labels[idx] };
+    });
+    for (let i = 0; i < 5; i++) {
+      const gy = top + (plotHeight * i / 4);
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', left);
+      line.setAttribute('y1', gy);
+      line.setAttribute('x2', width - right);
+      line.setAttribute('y2', gy);
+      line.setAttribute('stroke', '#e2e8f0');
+      line.setAttribute('stroke-width', '1');
+      svg.appendChild(line);
+      const tickValue = maxValue - ((maxValue - minValue) * i / 4);
+      addText(svg, left - 6, gy + 4, formatMoney(tickValue), 'end', 10);
+    }
+    const area = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const linePath = points.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+    area.setAttribute('d', `${linePath} L ${points[points.length - 1].x} ${top + plotHeight} L ${points[0].x} ${top + plotHeight} Z`);
+    area.setAttribute('fill', fillColor);
+    svg.appendChild(area);
+    line.setAttribute('d', linePath);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', '3');
+    svg.appendChild(line);
+    points.forEach((point) => {
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', point.x);
+      dot.setAttribute('cy', point.y);
+      dot.setAttribute('r', 4.5);
+      dot.setAttribute('fill', '#fff');
+      dot.setAttribute('stroke', color);
+      dot.setAttribute('stroke-width', '2');
+      svg.appendChild(dot);
+    });
+    labels.forEach((label, idx) => {
+      addText(svg, points[idx].x, height - 14, label, 'middle', 10);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const scriptNode = document.getElementById('dashboard-charts-data');
+    if (!scriptNode) return;
+    const charts = JSON.parse(scriptNode.textContent);
+    renderBarChart('chart-ventas-cliente', charts.ventas_por_cliente.labels, charts.ventas_por_cliente.values, '#1d4ed8');
+    renderLineChart('chart-ventas-mensual', charts.ventas_mensual.labels, charts.ventas_mensual.values, '#0f766e', 'rgba(15,118,110,0.15)');
+    renderLineChart('chart-rentabilidad', charts.rentabilidad_mensual.labels, charts.rentabilidad_mensual.values, '#b45309', 'rgba(180,83,9,0.15)');
+    renderBarChart('chart-cxc', charts.concentracion_cxc.labels, charts.concentracion_cxc.values, '#dc2626');
+    renderBarChart('chart-cxp', charts.concentracion_cxp.labels, charts.concentracion_cxp.values, '#7c3aed');
+    renderLineChart('chart-rendimiento-leche-diario', charts.rendimiento_leche_diario.labels, charts.rendimiento_leche_diario.values, '#0284c7', 'rgba(2,132,199,0.12)');
+    renderLineChart(
+      'chart-proyeccion',
+      [{% for item in proyeccion.serie %}'{{ item.fecha }}'{% if not forloop.last %}, {% endif %}{% endfor %}],
+      [{% for item in proyeccion.serie %}{{ item.saldo|default:0 }}{% if not forloop.last %}, {% endif %}{% endfor %}],
+      '#0f766e',
+      'rgba(15,118,110,0.12)'
+    );
   });
 </script>
 {% endblock %}
