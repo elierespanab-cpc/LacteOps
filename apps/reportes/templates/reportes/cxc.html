@@ -1,17 +1,54 @@
-{% extends 'reportes/base_reporte.html' %}
-{% load humanize custom_filters %}
+﻿{% extends 'reportes/base_reporte.html' %}
+{% load custom_filters %}
 
 {% block report_title %}
-    Reporte de Cuentas por Cobrar
-    <br><small>Al corte: {{ fecha_corte|date:"Y-m-d" }}</small>
+Reporte de Cuentas por Cobrar
+<br><small>Al corte: {{ fecha_corte|date:'Y-m-d' }}</small>
 {% endblock %}
 
 {% block report_content %}
 <div class="no-print filters">
-    <form method="get">
-        <label>Fecha de Corte: <input type="date" name="fecha_corte" value="{{ fecha_corte|date:'Y-m-d' }}"></label>
-        <button type="submit">Generar Reporte</button>
+    <form method="get" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;align-items:end;">
+        <label>Fecha de corte
+            <input type="date" name="fecha_corte" value="{{ fecha_corte|date:'Y-m-d' }}">
+        </label>
+        <label>Ordenar por
+            <select name="sort_by">
+                <option value="cliente" {% if sort_by == 'cliente' %}selected{% endif %}>Cliente</option>
+                <option value="fecha" {% if sort_by == 'fecha' %}selected{% endif %}>Fecha</option>
+                <option value="numero" {% if sort_by == 'numero' %}selected{% endif %}>Número</option>
+                <option value="saldo" {% if sort_by == 'saldo' %}selected{% endif %}>Saldo</option>
+            </select>
+        </label>
+        <label>Dirección
+            <select name="sort_dir">
+                <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>Ascendente</option>
+                <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Descendente</option>
+            </select>
+        </label>
+        <label><input type="checkbox" name="agrupar_por_cliente" value="1" {% if agrupar_por_cliente %}checked{% endif %}> Agrupar por cliente</label>
+        <label><input type="checkbox" name="mostrar_aging" value="1" {% if mostrar_aging %}checked{% endif %}> Mostrar aging</label>
+        <div><button type="submit">Actualizar</button></div>
     </form>
+</div>
+
+<div class="summary-grid">
+    <div class="summary-card">
+        <span>Total Facturado</span>
+        <strong>{{ totales.total|formato_moneda:'USD' }}</strong>
+    </div>
+    <div class="summary-card">
+        <span>Total Cobrado</span>
+        <strong>{{ totales.cobrado|formato_moneda:'USD' }}</strong>
+    </div>
+    <div class="summary-card">
+        <span>Notas de Crédito</span>
+        <strong>{{ totales.nc|formato_moneda:'USD' }}</strong>
+    </div>
+    <div class="summary-card">
+        <span>Neto Pendiente</span>
+        <strong>{{ totales.neto_pendiente|formato_moneda:'USD' }}</strong>
+    </div>
 </div>
 
 <table>
@@ -25,53 +62,87 @@
             <th class="text-right">Cobrado</th>
             <th class="text-right">NC</th>
             <th class="text-right">Neto Pendiente</th>
-            <th class="text-right">Días Vencida</th>
-            <th class="text-right">0-30 Días</th>
-            <th class="text-right">31-60 Días</th>
-            <th class="text-right">61-90 Días</th>
-            <th class="text-right">+90 Días</th>
+            {% if mostrar_aging %}
+            <th class="text-right">Días</th>
+            <th class="text-right">0-30</th>
+            <th class="text-right">31-60</th>
+            <th class="text-right">61-90</th>
+            <th class="text-right">+90</th>
+            {% endif %}
         </tr>
     </thead>
     <tbody>
-        {% regroup resultados by factura.cliente as clientes_group %}
-        {% for grupo in clientes_group %}
-            <tr class="group-header">
-                <td colspan="13">{{ grupo.grouper.nombre }} (RIF: {{ grupo.grouper.rif }})</td>
-            </tr>
-            {% for item in grupo.list %}
-            <tr>
-                <td></td>
-                <td>{{ item.factura.numero }}</td>
-                <td>{{ item.factura.fecha|date:"Y-m-d" }}</td>
-                <td>{{ item.factura.fecha_vencimiento|date:"Y-m-d" }}</td>
-                <td class="text-right">{{ item.total|formato_moneda:"USD" }}</td>
-                <td class="text-right">{{ item.monto_cobrado|formato_moneda:"USD" }}</td>
-                <td class="text-right">{{ item.nc_emitidas|formato_moneda:"USD" }}</td>
-                <td class="text-right">{{ item.neto_pendiente|formato_moneda:"USD" }}</td>
-                <td class="text-right">{{ item.dias_vencida }}</td>
-                <td class="text-right">{{ item.s_0_30|formato_moneda:"USD" }}</td>
-                <td class="text-right">{{ item.s_31_60|formato_moneda:"USD" }}</td>
-                <td class="text-right">{{ item.s_61_90|formato_moneda:"USD" }}</td>
-                <td class="text-right">{{ item.s_90_plus|formato_moneda:"USD" }}</td>
-            </tr>
+        {% if agrupar_por_cliente %}
+            {% for grupo in grupos_cliente %}
+                <tr class="group-header">
+                    <td colspan="{% if mostrar_aging %}13{% else %}8{% endif %}">{{ grupo.cliente.nombre }}{% if grupo.cliente.rif %} ({{ grupo.cliente.rif }}){% endif %}</td>
+                </tr>
+                {% for item in grupo.items %}
+                <tr>
+                    <td></td>
+                    <td>{{ item.factura.numero }}</td>
+                    <td>{{ item.factura.fecha|date:'Y-m-d' }}</td>
+                    <td>{{ item.factura.fecha_vencimiento|date:'Y-m-d' }}</td>
+                    <td class="text-right">{{ item.total|formato_moneda:'USD' }}</td>
+                    <td class="text-right">{{ item.monto_cobrado|formato_moneda:'USD' }}</td>
+                    <td class="text-right">{{ item.nc_emitidas|formato_moneda:'USD' }}</td>
+                    <td class="text-right">{{ item.neto_pendiente|formato_moneda:'USD' }}</td>
+                    {% if mostrar_aging %}
+                    <td class="text-right">{{ item.dias_vencida }}</td>
+                    <td class="text-right">{{ item.s_0_30|formato_moneda:'USD' }}</td>
+                    <td class="text-right">{{ item.s_31_60|formato_moneda:'USD' }}</td>
+                    <td class="text-right">{{ item.s_61_90|formato_moneda:'USD' }}</td>
+                    <td class="text-right">{{ item.s_90_plus|formato_moneda:'USD' }}</td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+                <tr class="group-subtotal">
+                    <td colspan="{% if mostrar_aging %}12{% else %}7{% endif %}" class="text-right">Subtotal {{ grupo.cliente.nombre }}</td>
+                    <td class="text-right">{{ grupo.subtotal|formato_moneda:'USD' }}</td>
+                </tr>
+            {% empty %}
+            <tr><td colspan="{% if mostrar_aging %}13{% else %}8{% endif %}" class="text-center">No hay cuentas por cobrar a la fecha de corte.</td></tr>
             {% endfor %}
-        {% empty %}
-        <tr>
-            <td colspan="13" class="text-center">No hay cuentas por cobrar a la fecha de corte.</td>
-        </tr>
-        {% endfor %}
-        <tr class="total-row">
-            <td colspan="4" class="text-right">Total General:</td>
-            <td class="text-right">{{ totales.total|formato_moneda:"USD" }}</td>
-            <td class="text-right">{{ totales.cobrado|formato_moneda:"USD" }}</td>
-            <td class="text-right">{{ totales.nc|formato_moneda:"USD" }}</td>
-            <td class="text-right">{{ totales.neto_pendiente|formato_moneda:"USD" }}</td>
-            <td class="text-right"></td>
-            <td class="text-right">{{ totales.s_0_30|formato_moneda:"USD" }}</td>
-            <td class="text-right">{{ totales.s_31_60|formato_moneda:"USD" }}</td>
-            <td class="text-right">{{ totales.s_61_90|formato_moneda:"USD" }}</td>
-            <td class="text-right">{{ totales.s_90_plus|formato_moneda:"USD" }}</td>
-        </tr>
+        {% else %}
+            {% for item in resultados %}
+            <tr>
+                <td>{{ item.factura.cliente.nombre }}</td>
+                <td>{{ item.factura.numero }}</td>
+                <td>{{ item.factura.fecha|date:'Y-m-d' }}</td>
+                <td>{{ item.factura.fecha_vencimiento|date:'Y-m-d' }}</td>
+                <td class="text-right">{{ item.total|formato_moneda:'USD' }}</td>
+                <td class="text-right">{{ item.monto_cobrado|formato_moneda:'USD' }}</td>
+                <td class="text-right">{{ item.nc_emitidas|formato_moneda:'USD' }}</td>
+                <td class="text-right">{{ item.neto_pendiente|formato_moneda:'USD' }}</td>
+                {% if mostrar_aging %}
+                <td class="text-right">{{ item.dias_vencida }}</td>
+                <td class="text-right">{{ item.s_0_30|formato_moneda:'USD' }}</td>
+                <td class="text-right">{{ item.s_31_60|formato_moneda:'USD' }}</td>
+                <td class="text-right">{{ item.s_61_90|formato_moneda:'USD' }}</td>
+                <td class="text-right">{{ item.s_90_plus|formato_moneda:'USD' }}</td>
+                {% endif %}
+            </tr>
+            {% empty %}
+            <tr><td colspan="{% if mostrar_aging %}13{% else %}8{% endif %}" class="text-center">No hay cuentas por cobrar a la fecha de corte.</td></tr>
+            {% endfor %}
+        {% endif %}
     </tbody>
+    <tfoot>
+        <tr class="total-row">
+            <td colspan="4" class="text-right">Total General</td>
+            <td class="text-right">{{ totales.total|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ totales.cobrado|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ totales.nc|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ totales.neto_pendiente|formato_moneda:'USD' }}</td>
+            {% if mostrar_aging %}
+            <td></td>
+            <td class="text-right">{{ totales.s_0_30|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ totales.s_31_60|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ totales.s_61_90|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ totales.s_90_plus|formato_moneda:'USD' }}</td>
+            {% endif %}
+        </tr>
+    </tfoot>
 </table>
 {% endblock %}
+

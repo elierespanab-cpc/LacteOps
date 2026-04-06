@@ -1,65 +1,108 @@
-{% extends 'admin/base.html' %}
-{% load i18n static %}
-
-{% block title %}{{ title }} - LacteOps{% endblock %}
-
-{% block extrastyle %}
-<style>
-    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px; color: #333; }
-    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #1a237e; padding-bottom: 12px; }
-    .logo-reporte { max-height: 60px; width: auto; display: block; margin: 0 auto 8px auto; }
-    .header p { margin: 2px 0; font-size: 12px; color: #555; }
-    .report-title { text-align: center; margin: 15px 0; font-size: 16px; font-weight: bold; color: #1a237e; }
-    .filters { margin-bottom: 20px; font-size: 11px; background: #f9f9f9; padding: 10px; border: 1px solid #ddd; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
-    th { background-color: #e8eaf6; color: #1a237e; font-weight: bold; }
-    .text-right { text-align: right; }
-    .text-center { text-align: center; }
-    .total-row { font-weight: bold; background-color: #eee; }
-    .group-header { font-weight: bold; background-color: #e0e0e0; padding-top: 15px; }
-    @media print {
-        .no-print,
-        .main-sidebar, aside.main-sidebar,
-        .main-header, nav.main-header,
-        .content-header, .breadcrumb,
-        footer.main-footer { display: none !important; }
-        .content-wrapper {
-            margin-left: 0 !important;
-            padding: 0 !important;
+﻿{% load i18n %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}{{ title|default:'Reportes' }} - LacteOps{% endblock %}</title>
+    <style>
+        :root {
+            --sidebar-bg: #182235;
+            --sidebar-fg: #eef2f7;
+            --sidebar-muted: #9fb0c7;
+            --accent: #1f6feb;
+            --surface: #ffffff;
+            --surface-soft: #f5f7fb;
+            --border: #d8dee9;
+            --text: #223046;
         }
-        body { font-size: 10px; margin: 0; }
-        .filters { border: none; background: none; padding: 0; }
-        @page { size: letter; margin: 0.5in; }
-    }
-</style>
-{% endblock %}
-
-{% block content %}
-<div id="content-main">
-    <div class="no-print" style="margin-bottom: 20px;">
-        <button onclick="window.print()" style="padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px;">Imprimir Reporte</button>
-        <button onclick="history.back()" style="padding: 8px 15px; cursor: pointer; background: #6c757d; color: white; border: none; border-radius: 4px; margin-left: 10px;">Volver</button>
-        {% if request.GET %}
-            <a href="?{{ request.GET.urlencode }}&exportar=1" style="padding: 8px 15px; background: #28a745; color: white; border-radius: 4px; text-decoration: none; margin-left: 10px;">Exportar Excel</a>
-        {% else %}
-            <a href="?exportar=1" style="padding: 8px 15px; background: #28a745; color: white; border-radius: 4px; text-decoration: none; margin-left: 10px;">Exportar Excel</a>
-        {% endif %}
-    </div>
-
-    <div class="header">
-        <img src="{% static 'img/logo.png' %}" alt="Lácteos El Cristo" class="logo-reporte">
-        {% if empresa %}
-            <p><strong>{{ empresa.nombre_empresa }}</strong> &nbsp;|&nbsp; RIF: {{ empresa.rif }}</p>
-            <p>{{ empresa.direccion }}</p>
-        {% endif %}
-    </div>
-
-    <div class="report-title">
-        {% block report_title %}Título del Reporte{% endblock %}
-    </div>
-
-    {% block report_content %}
-    {% endblock %}
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Segoe UI, Tahoma, sans-serif; color: var(--text); background: var(--surface-soft); }
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar { width: 250px; background: var(--sidebar-bg); color: var(--sidebar-fg); padding: 24px 18px; }
+        .sidebar h1 { margin: 0 0 18px; font-size: 20px; }
+        .sidebar p { margin: 0 0 18px; color: var(--sidebar-muted); font-size: 12px; }
+        .sidebar nav a { display: block; color: var(--sidebar-fg); text-decoration: none; padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; }
+        .sidebar nav a:hover { background: rgba(255,255,255,.08); }
+        .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+        .main { flex: 1; padding: 24px; }
+        .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(22,33,55,.06); }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+        .toolbar a, .toolbar button { border: 0; border-radius: 8px; padding: 10px 14px; cursor: pointer; text-decoration: none; font-size: 13px; }
+        .toolbar .primary { background: var(--accent); color: #fff; }
+        .toolbar .secondary { background: #dfe7f3; color: #223046; }
+        .toolbar .success { background: #1d8f5a; color: #fff; }
+        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #1a237e; padding-bottom: 12px; }
+        .header p { margin: 2px 0; font-size: 12px; color: #555; }
+        .report-title { text-align: center; margin: 15px 0; font-size: 16px; font-weight: bold; color: #1a237e; }
+        .filters { margin-bottom: 20px; font-size: 11px; background: #f9f9f9; padding: 10px; border: 1px solid #ddd; border-radius: 10px; }
+        .filters form { display: grid; gap: 12px; }
+        .filters label { font-weight: 600; color: #31425f; }
+        .filters input, .filters select { margin-top: 4px; padding: 7px 8px; border-radius: 8px; border: 1px solid #c9d3e0; min-width: 150px; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 0 0 18px; }
+        .summary-card { border: 1px solid var(--border); background: linear-gradient(180deg, #fff 0%, #f8fbff 100%); border-radius: 12px; padding: 14px; }
+        .summary-card span { display: block; font-size: 11px; color: #6b7a90; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+        .summary-card strong { font-size: 22px; color: #1c2c49; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #fff; }
+        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; vertical-align: top; }
+        th { background-color: #e8eaf6; color: #1a237e; font-weight: bold; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .total-row { font-weight: bold; background-color: #eee; }
+        .group-header { font-weight: bold; background-color: #e0e0e0; }
+        .group-subtotal { font-weight: bold; background-color: #f0f3f8; }
+        @media print {
+            .sidebar, .toolbar, .no-print { display: none !important; }
+            .main { padding: 0; }
+            .panel { box-shadow: none; border: 0; padding: 0; }
+            body { font-size: 10px; margin: 0; background: #fff; }
+            .filters { border: none; background: none; padding: 0; }
+            .summary-grid { display: none; }
+            @page { size: letter; margin: 0.5in; }
+        }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar no-print">
+        <h1>LacteOps</h1>
+        <p>Centro de reportes</p>
+        <nav>
+            <a href="{% url 'reportes:dashboard' %}">Dashboard</a>
+            <a href="{% url 'reportes:ventas' %}">Ventas</a>
+            <a href="{% url 'reportes:cxc' %}">Cuentas por Cobrar</a>
+            <a href="{% url 'reportes:compras' %}">Compras</a>
+            <a href="{% url 'reportes:cxp' %}">Cuentas por Pagar</a>
+            <a href="{% url 'reportes:produccion' %}">Produccion</a>
+            <a href="{% url 'reportes:gastos' %}">Gastos y Servicios</a>
+            <a href="{% url 'reportes:capital_trabajo' %}">Capital de Trabajo</a>
+            <a href="{% url 'reportes:stock' %}">Stock</a>
+            <a href="{% url 'reportes:kardex' %}">Kardex</a>
+            <a href="{% url 'reportes:tesoreria' %}">Tesoreria</a>
+        </nav>
+    </aside>
+    <main class="main">
+        <div class="panel">
+            <div class="toolbar no-print">
+                <button class="primary" onclick="window.print()">Imprimir reporte</button>
+                <button class="secondary" onclick="history.back()">Volver</button>
+                {% if request.GET %}
+                    <a class="success" href="?{{ request.GET.urlencode }}&exportar=1">Exportar Excel</a>
+                {% else %}
+                    <a class="success" href="?exportar=1">Exportar Excel</a>
+                {% endif %}
+            </div>
+            <div class="header">
+                {% if empresa %}
+                    <p><strong>{{ empresa.nombre_empresa|default:empresa.nombre_empresa }}</strong> | RIF: {{ empresa.rif }}</p>
+                    <p>{{ empresa.direccion }}</p>
+                {% else %}
+                    <p><strong>LacteOps</strong></p>
+                {% endif %}
+            </div>
+            <div class="report-title">{% block report_title %}Titulo del Reporte{% endblock %}</div>
+            {% block report_content %}{% endblock %}
+        </div>
+    </main>
 </div>
-{% endblock %}
+</body>
+</html>

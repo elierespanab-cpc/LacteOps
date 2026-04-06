@@ -1,90 +1,140 @@
-{% extends 'reportes/base_reporte.html' %}
-{% load humanize custom_filters %}
+﻿{% extends 'reportes/base_reporte.html' %}
+{% load custom_filters %}
 
 {% block report_title %}
-    Reporte de Compras
-    <br><small>
-        {% if fecha_desde %}Desde: {{ fecha_desde }} {% endif %}
-        {% if fecha_hasta %}Hasta: {{ fecha_hasta }} {% endif %}
-    </small>
+Reporte de Compras
+<br><small>
+    {% if fecha_desde %}Desde: {{ fecha_desde }} {% endif %}
+    {% if fecha_hasta %}Hasta: {{ fecha_hasta }} {% endif %}
+</small>
 {% endblock %}
 
 {% block report_content %}
 <div class="no-print filters">
-    <form method="get">
-        <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
-        <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}"></label>
-        <br>
-        <label>Proveedores:
-            <select name="proveedor" multiple>
-                {% for p in proveedores %}
-                <option value="{{ p.id }}" {% if p.id|stringformat:'s' in proveedor_ids %}selected{% endif %}>{{ p.nombre }}</option>
-                {% endfor %}
+    <form method="get" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;align-items:end;">
+        <label>Desde
+            <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}">
+        </label>
+        <label>Hasta
+            <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}">
+        </label>
+        <label>Buscar proveedor
+            <input type="search" name="proveedor_q" value="{{ proveedor_q }}" placeholder="Nombre o RIF">
+        </label>
+        <label>Buscar artículo
+            <input type="search" name="articulo_q" value="{{ articulo_q }}" placeholder="Nombre o código">
+        </label>
+        <label>Estado de pago
+            <select name="estado_pago">
+                <option value="">Todos</option>
+                <option value="Pendiente" {% if estado_pago == 'Pendiente' %}selected{% endif %}>Pendiente</option>
+                <option value="Parcialmente Pendiente" {% if estado_pago == 'Parcialmente Pendiente' %}selected{% endif %}>Parcialmente Pendiente</option>
+                <option value="Pagada" {% if estado_pago == 'Pagada' %}selected{% endif %}>Pagada</option>
             </select>
         </label>
-        <label>ArtÃ­culos:
-            <select name="articulo" multiple>
-                {% for p in productos %}
-                <option value="{{ p.id }}" {% if p.id|stringformat:'s' in productos_ids %}selected{% endif %}>{{ p.nombre }}</option>
-                {% endfor %}
+        <label>Estado de factura
+            <select name="estado_factura">
+                <option value="">Todos</option>
+                <option value="RECIBIDA" {% if estado_factura == 'RECIBIDA' %}selected{% endif %}>Recibida</option>
+                <option value="APROBADA" {% if estado_factura == 'APROBADA' %}selected{% endif %}>Aprobada</option>
             </select>
         </label>
-        <label><input type="checkbox" name="agrupar_por_proveedor" value="1" {% if agrupar_por_proveedor %}checked{% endif %}> Agrupar por Proveedor</label>
-        <button type="submit">Generar Reporte</button>
+        <label>Ordenar por
+            <select name="sort_by">
+                <option value="fecha" {% if sort_by == 'fecha' %}selected{% endif %}>Fecha</option>
+                <option value="numero" {% if sort_by == 'numero' %}selected{% endif %}>Número de factura</option>
+                <option value="proveedor" {% if sort_by == 'proveedor' %}selected{% endif %}>Proveedor</option>
+            </select>
+        </label>
+        <label>Dirección
+            <select name="sort_dir">
+                <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Descendente</option>
+                <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>Ascendente</option>
+            </select>
+        </label>
+        <label><input type="checkbox" name="agrupar_por_proveedor" value="1" {% if agrupar_por_proveedor %}checked{% endif %}> Agrupar por proveedor</label>
+        <label><input type="checkbox" name="mostrar_detalles" value="1" {% if mostrar_detalles %}checked{% endif %}> Mostrar ítems</label>
+        <div><button type="submit">Actualizar</button></div>
     </form>
+</div>
+
+<div class="summary-grid">
+    <div class="summary-card">
+        <span>Total Compras</span>
+        <strong>{{ total_general|formato_moneda:'USD' }}</strong>
+    </div>
+    <div class="summary-card">
+        <span>Total Pagado</span>
+        <strong>{{ total_pagado|formato_moneda:'USD' }}</strong>
+    </div>
+    <div class="summary-card">
+        <span>Saldo Pendiente</span>
+        <strong>{{ total_pendiente|formato_moneda:'USD' }}</strong>
+    </div>
 </div>
 
 <table>
     <thead>
         <tr>
-            <th>NÃºmero</th>
+            <th>Factura</th>
             <th>Fecha</th>
             <th>Proveedor</th>
-            <th>Articulo</th>
-            <th class="text-right">Cant.</th>
-            <th class="text-right">Precio Unit.</th>
-            <th class="text-right">Subtotal</th>
-            <th class="text-right">Moneda</th>
-            <th class="text-right">Monto USD</th>
-            <th class="text-center">Estatus</th>
-            <th class="text-center">Estado</th>
+            <th class="text-right">Total</th>
+            <th class="text-right">Pagado</th>
+            <th class="text-right">Pendiente</th>
+            <th class="text-center">Estado Pago</th>
+            <th class="text-center">Estado Factura</th>
         </tr>
     </thead>
     <tbody>
         {% for fila in filas %}
-            {% if fila.tipo == 'detalle' %}
-            {% with d=fila.detalle %}
-            <tr>
-                <td>{{ d.factura.numero }}</td>
-                <td>{{ d.factura.fecha|date:"Y-m-d" }}</td>
-                <td>{{ d.factura.proveedor.nombre }}</td>
-                <td>{{ d.producto.codigo }} - {{ d.producto.nombre }}</td>
-                <td class="text-right">{{ d.cantidad|formato_cantidad }}</td>
-                <td class="text-right">{{ d.precio_unitario|formato_moneda:"USD" }}</td>
-                <td class="text-right">{{ d.subtotal|formato_moneda:d.factura.moneda }}</td>
-                <td class="text-right">{{ d.factura.moneda }}</td>
-                <td class="text-right">{{ d.monto_usd|formato_moneda:"USD" }}</td>
-                <td class="text-center">{{ d.estatus_pago }}</td>
-                <td class="text-center">{{ d.factura.estado }}</td>
-            </tr>
-            {% endwith %}
-            {% elif fila.tipo == 'subtotal' and agrupar_por_proveedor %}
-            <tr class="group-subtotal">
-                <td colspan="8" class="text-right"><strong>Subtotal {{ fila.proveedor }}{% if fila.rif %} (RIF: {{ fila.rif }}){% endif %}</strong></td>
-                <td class="text-right"><strong>{{ fila.monto_total|formato_moneda:"USD" }}</strong></td>
-                <td colspan="2"></td>
-            </tr>
+            {% if fila.tipo == 'factura' %}
+                {% with f=fila.factura %}
+                <tr>
+                    <td>{{ f.numero }}</td>
+                    <td>{{ f.fecha|date:'Y-m-d' }}</td>
+                    <td>{{ f.proveedor.nombre }}</td>
+                    <td class="text-right">{{ f.total|formato_moneda:'USD' }}</td>
+                    <td class="text-right">{{ f.total_pagado|formato_moneda:'USD' }}</td>
+                    <td class="text-right">{{ f.saldo_pendiente_total|formato_moneda:'USD' }}</td>
+                    <td class="text-center">{{ f.estado_pago }}</td>
+                    <td class="text-center">{{ f.estado }}</td>
+                </tr>
+                {% if mostrar_detalles %}
+                    {% for d in f.detalles_reporte %}
+                    <tr style="background:#fafafa;">
+                        <td></td>
+                        <td colspan="2">{{ d.producto.codigo }} - {{ d.producto.nombre }}</td>
+                        <td class="text-right">{{ d.subtotal|formato_moneda:f.moneda }}</td>
+                        <td class="text-right">Cant. {{ d.cantidad|formato_cantidad }}</td>
+                        <td class="text-right">CU {{ d.costo_unitario|formato_costo }}</td>
+                        <td colspan="2"></td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
+                {% endwith %}
+            {% elif fila.tipo == 'subtotal' %}
+                <tr class="group-subtotal">
+                    <td colspan="3" class="text-right"><strong>Subtotal {{ fila.proveedor }}{% if fila.rif %} ({{ fila.rif }}){% endif %}</strong></td>
+                    <td class="text-right"><strong>{{ fila.total|formato_moneda:'USD' }}</strong></td>
+                    <td class="text-right"><strong>{{ fila.pagado|formato_moneda:'USD' }}</strong></td>
+                    <td class="text-right"><strong>{{ fila.pendiente|formato_moneda:'USD' }}</strong></td>
+                    <td colspan="2"></td>
+                </tr>
             {% endif %}
         {% empty %}
-        <tr>
-            <td colspan="11" class="text-center">No se encontraron registros.</td>
-        </tr>
+        <tr><td colspan="8" class="text-center">No se encontraron facturas con los filtros seleccionados.</td></tr>
         {% endfor %}
+    </tbody>
+    <tfoot>
         <tr class="total-row">
-            <td colspan="8" class="text-right"><strong>Total General</strong></td>
-            <td class="text-right"><strong>{{ total_general|formato_moneda:"USD" }}</strong></td>
+            <td colspan="3" class="text-right">Total General</td>
+            <td class="text-right">{{ total_general|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ total_pagado|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ total_pendiente|formato_moneda:'USD' }}</td>
             <td colspan="2"></td>
         </tr>
-    </tbody>
+    </tfoot>
 </table>
 {% endblock %}
+

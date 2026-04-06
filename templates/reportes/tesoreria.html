@@ -1,221 +1,138 @@
-{% load humanize %}
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>{{ titulo }} — {{ empresa.nombre|default:"LacteOps" }}</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 13px; color: #222; background: #fff; }
+﻿{% extends 'reportes/base_reporte.html' %}
+{% load custom_filters %}
 
-    /* ── Encabezado ── */
-    .report-header { display: flex; justify-content: space-between; align-items: flex-start;
-                     border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 14px; }
-    .report-header .empresa-info h2 { font-size: 17px; }
-    .report-header .empresa-info p  { font-size: 11px; color: #555; }
-    .report-header .titulo-bloque   { text-align: right; }
-    .report-header .titulo-bloque h1 { font-size: 16px; text-transform: uppercase; }
-    .report-header .titulo-bloque p  { font-size: 11px; color: #555; }
+{% block report_title %}
+{{ titulo }}
+{% if fecha_desde or fecha_hasta %}
+<br><small>{% if fecha_desde %}Desde: {{ fecha_desde }}{% endif %}{% if fecha_hasta %} Hasta: {{ fecha_hasta }}{% endif %}</small>
+{% endif %}
+{% endblock %}
 
-    /* ── Filtros ── */
-    .filtros-form { background: #f5f5f5; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; }
-    .filtros-form h3 { font-size: 13px; margin-bottom: 8px; }
-    .filtros-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
-    .filtros-row label { font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px; }
-    .filtros-row select, .filtros-row input[type=date] {
-        border: 1px solid #ccc; border-radius: 3px; padding: 4px 6px; font-size: 12px; }
-    select[multiple] { height: 80px; }
-    .filtros-row button { background: #2c6fad; color: #fff; border: none; padding: 5px 14px;
-                          border-radius: 3px; cursor: pointer; font-size: 12px; }
-    .filtros-row button:hover { background: #1f5080; }
-
-    /* ── Tablas ── */
-    table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
-    thead tr th { background: #2c6fad; color: #fff; padding: 6px 8px; text-align: left; font-size: 12px; }
-    tbody tr td { padding: 5px 8px; border-bottom: 1px solid #e0e0e0; font-size: 12px; }
-    tbody tr:nth-child(even) td { background: #f9f9f9; }
-    tfoot tr td { padding: 5px 8px; font-weight: bold; background: #e8f0fb; font-size: 12px; }
-    .text-right { text-align: right; }
-    .text-center { text-align: center; }
-
-    /* ── Origen badges ── */
-    .badge-caja      { background: #d4edda; color: #155724; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
-    .badge-tesoreria { background: #d1ecf1; color: #0c5460; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
-    .badge-entrada   { color: #1a7e1a; font-weight: bold; }
-    .badge-salida    { color: #b22222; font-weight: bold; }
-
-    /* ── Resumen ── */
-    .resumen-section h3 { font-size: 14px; margin-bottom: 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
-
-    /* ── Mensajes ── */
-    .empty-msg { text-align: center; color: #888; padding: 20px 0; font-style: italic; }
-
-    /* ── Impresión ── */
-    @media print {
-      .filtros-form, .no-print { display: none !important; }
-      body { font-size: 11px; }
-      thead tr th { background: #333 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      tfoot tr td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      a { text-decoration: none; color: inherit; }
-    }
-  </style>
-</head>
-<body>
-
-<!-- Encabezado -->
-<div class="report-header">
-  <div class="empresa-info">
-    <h2>{{ empresa.nombre|default:"LacteOps" }}</h2>
-    {% if empresa.rif %}<p>RIF: {{ empresa.rif }}</p>{% endif %}
-    {% if empresa.telefono %}<p>Telf.: {{ empresa.telefono }}</p>{% endif %}
-    {% if empresa.direccion %}<p>{{ empresa.direccion }}</p>{% endif %}
-  </div>
-  <div class="titulo-bloque">
-    <h1>{{ titulo }}</h1>
-    <p>Generado: {% now "d/m/Y H:i" %}</p>
-    {% if fecha_desde or fecha_hasta %}
-      <p>
-        {% if fecha_desde %}Desde: {{ fecha_desde }}{% endif %}
-        {% if fecha_hasta %} Hasta: {{ fecha_hasta }}{% endif %}
-      </p>
-    {% endif %}
-  </div>
+{% block report_content %}
+<div class="no-print filters">
+    <form method="get">
+        <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde }}"></label>
+        <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta }}"></label>
+        <label>Cuentas:
+            <select name="cuenta" multiple style="height:70px;">
+                {% for c in cuentas %}
+                <option value="{{ c.pk }}" {% if c.pk|stringformat:'s' in cuentas_ids %}selected{% endif %}>{{ c.nombre }} ({{ c.moneda }})</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Tipo:
+            <select name="tipo_movimiento" multiple style="height:70px;">
+                {% for t in todos_tipos %}
+                <option value="{{ t }}" {% if t in tipos_sel %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="submit">Consultar</button>
+        <small style="display:block;margin-top:5px;color:#666;">Las fechas son inclusivas y se aplican como rango exacto DD/MM/YYYY.</small>
+    </form>
 </div>
 
-<!-- Filtros -->
-<form method="get" class="filtros-form no-print">
-  <h3>Filtros</h3>
-  <div class="filtros-row">
-    <div>
-      <label for="id_fecha_desde">Fecha desde</label>
-      <input type="date" name="fecha_desde" id="id_fecha_desde" value="{{ fecha_desde }}">
+<div class="summary-grid">
+    <div class="summary-card">
+        <span>Saldo Inicial USD</span>
+        <strong>{{ total_saldo_inicial_usd|formato_moneda:'USD' }}</strong>
     </div>
-    <div>
-      <label for="id_fecha_hasta">Fecha hasta</label>
-      <input type="date" name="fecha_hasta" id="id_fecha_hasta" value="{{ fecha_hasta }}">
+    <div class="summary-card">
+        <span>Entradas USD</span>
+        <strong>{{ total_entradas|formato_moneda:'USD' }}</strong>
     </div>
-    <div>
-      <label for="id_cuenta">Cuentas (multi)</label>
-      <select name="cuenta" id="id_cuenta" multiple>
-        {% for c in cuentas %}
-          <option value="{{ c.pk }}" {% if c.pk|stringformat:"s" in cuentas_ids %}selected{% endif %}>
-            {{ c.nombre }} ({{ c.moneda }})
-          </option>
-        {% endfor %}
-      </select>
+    <div class="summary-card">
+        <span>Salidas USD</span>
+        <strong>{{ total_salidas|formato_moneda:'USD' }}</strong>
     </div>
-    <div>
-      <label for="id_tipo">Tipo de movimiento (multi)</label>
-      <select name="tipo_movimiento" id="id_tipo" multiple>
-        {% for t in todos_tipos %}
-          <option value="{{ t }}" {% if t in tipos_sel %}selected{% endif %}>{{ t }}</option>
-        {% endfor %}
-      </select>
+    <div class="summary-card">
+        <span>Neto USD</span>
+        <strong>{{ total_neto|formato_moneda:'USD' }}</strong>
     </div>
-    <div>
-      <button type="submit">Consultar</button>
-      <button type="button" onclick="window.print()" style="background:#555;margin-left:6px;">Imprimir</button>
-    </div>
-  </div>
-</form>
+</div>
 
-<!-- ─────────── Tabla consolidada ─────────── -->
 <h3 style="margin-bottom:8px;">Movimientos Consolidados</h3>
-{% if movimientos %}
 <table>
-  <thead>
-    <tr>
-      <th>Fecha</th>
-      <th>Cuenta</th>
-      <th class="text-center">Origen</th>
-      <th>Tipo</th>
-      <th>Referencia</th>
-      <th>Descripción</th>
-      <th class="text-right">Monto</th>
-      <th class="text-center">Moneda</th>
-      <th class="text-right">Tasa</th>
-      <th class="text-right">USD</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for m in movimientos %}
-    <tr>
-      <td>{{ m.fecha|date:"d/m/Y" }}</td>
-      <td>{{ m.cuenta.nombre }}</td>
-      <td class="text-center">
-        {% if m.origen == "Caja" %}
-          <span class="badge-caja">Caja</span>
-        {% else %}
-          <span class="badge-tesoreria">Tesorería</span>
-        {% endif %}
-      </td>
-      <td>
-        {% if m.tipo in "ENTRADA,TRANSFERENCIA_ENTRADA,ABONO" %}
-          <span class="badge-entrada">{{ m.tipo }}</span>
-        {% else %}
-          <span class="badge-salida">{{ m.tipo }}</span>
-        {% endif %}
-      </td>
-      <td>{{ m.referencia }}</td>
-      <td>{{ m.descripcion|truncatechars:50 }}</td>
-      <td class="text-right">{{ m.monto|floatformat:2 }}</td>
-      <td class="text-center">{{ m.moneda }}</td>
-      <td class="text-right">{{ m.tasa|floatformat:6 }}</td>
-      <td class="text-right">{{ m.monto_usd|floatformat:2 }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-  <tfoot>
-    <tr>
-      <td colspan="9">Total movimientos: {{ movimientos|length }}</td>
-      <td class="text-right">{{ total_neto|floatformat:2 }}</td>
-    </tr>
-  </tfoot>
-</table>
-{% else %}
-  <p class="empty-msg">No hay movimientos para los filtros seleccionados.</p>
-{% endif %}
-
-<!-- ─────────── Resumen por cuenta ─────────── -->
-{% if resumen %}
-<div class="resumen-section">
-  <h3>Resumen por Cuenta Bancaria</h3>
-  <table>
     <thead>
-      <tr>
-        <th>Cuenta</th>
-        <th class="text-right">Total Entradas (USD)</th>
-        <th class="text-right">Total Salidas (USD)</th>
-        <th class="text-right">Neto (USD)</th>
-      </tr>
+        <tr>
+            <th>Fecha</th>
+            <th>Cuenta</th>
+            <th>Origen</th>
+            <th>Tipo</th>
+            <th>Referencia</th>
+            <th>Descripción</th>
+            <th class="text-right">Monto VES</th>
+            <th class="text-right">Tasa</th>
+            <th class="text-right">Monto USD</th>
+            <th class="text-right">Saldo VES</th>
+            <th class="text-right">Saldo USD</th>
+        </tr>
     </thead>
     <tbody>
-      {% for r in resumen %}
-      <tr>
-        <td>{{ r.cuenta.nombre }} ({{ r.cuenta.moneda }})</td>
-        <td class="text-right badge-entrada">{{ r.entradas_usd|floatformat:2 }}</td>
-        <td class="text-right badge-salida">{{ r.salidas_usd|floatformat:2 }}</td>
-        <td class="text-right">
-          {% if r.neto >= 0 %}
-            <span class="badge-entrada">{{ r.neto|floatformat:2 }}</span>
-          {% else %}
-            <span class="badge-salida">{{ r.neto|floatformat:2 }}</span>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
+        {% for m in movimientos %}
+        <tr>
+            <td>{{ m.fecha|date:'d/m/Y' }}</td>
+            <td>{{ m.cuenta.nombre }}</td>
+            <td>{{ m.origen }}</td>
+            <td>{{ m.tipo }}</td>
+            <td>{{ m.referencia }}</td>
+            <td>{{ m.descripcion|truncatechars:50 }}</td>
+            <td class="text-right">{{ m.monto_ves|formato_moneda:'VES' }}</td>
+            <td class="text-right">{{ m.tasa|formato_numero }}</td>
+            <td class="text-right">{{ m.monto_usd|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ m.saldo_ves|formato_moneda:'VES' }}</td>
+            <td class="text-right">{{ m.saldo_usd|formato_moneda:'USD' }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="11" class="text-center">No hay movimientos para los filtros seleccionados.</td></tr>
+        {% endfor %}
     </tbody>
     <tfoot>
-      <tr>
-        <td>Total General</td>
-        <td class="text-right">{{ total_entradas|floatformat:2 }}</td>
-        <td class="text-right">{{ total_salidas|floatformat:2 }}</td>
-        <td class="text-right">{{ total_neto|floatformat:2 }}</td>
-      </tr>
+        <tr class="total-row">
+            <td colspan="8" class="text-right">Neto del período</td>
+            <td class="text-right">{{ total_neto|formato_moneda:'USD' }}</td>
+            <td></td>
+            <td></td>
+        </tr>
     </tfoot>
-  </table>
-</div>
-{% endif %}
+</table>
 
-</body>
-</html>
+{% if resumen %}
+<h3 style="margin-top:20px;margin-bottom:8px;">Resumen por Cuenta Bancaria</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Cuenta</th>
+            <th class="text-right">Saldo Inicial</th>
+            <th class="text-right">Saldo Inicial USD</th>
+            <th class="text-right">Entradas USD</th>
+            <th class="text-right">Salidas USD</th>
+            <th class="text-right">Neto USD</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in resumen %}
+        <tr>
+            <td>{{ r.cuenta.nombre }} ({{ r.cuenta.moneda }})</td>
+            <td class="text-right">{{ r.saldo_inicial|formato_moneda:r.cuenta.moneda }}</td>
+            <td class="text-right">{{ r.saldo_inicial_usd|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ r.entradas_usd|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ r.salidas_usd|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ r.neto|formato_moneda:'USD' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr class="total-row">
+            <td>Total General</td>
+            <td class="text-right">{{ total_saldo_inicial|formato_numero }}</td>
+            <td class="text-right">{{ total_saldo_inicial_usd|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ total_entradas|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ total_salidas|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ total_neto|formato_moneda:'USD' }}</td>
+        </tr>
+    </tfoot>
+</table>
+{% endif %}
+{% endblock %}
+

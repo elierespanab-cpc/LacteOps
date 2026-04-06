@@ -1,30 +1,21 @@
-{% extends 'reportes/base_reporte.html' %}
-{% load humanize custom_filters %}
+﻿{% extends 'reportes/base_reporte.html' %}
+{% load custom_filters %}
 
 {% block report_title %}
-    Reporte de Stock
-    <br><small>
-        {% if solo_activos %}Solo productos activos{% else %}Todos los productos{% endif %}
-        {% if request.GET.fecha %} | Fecha: {{ request.GET.fecha }}{% endif %}
-        {% if request.GET.con_stock %} | Solo con stock{% endif %}
-    </small>
+Reporte de Stock
+<br><small>
+    {% if solo_activos %}Solo productos activos{% else %}Todos los productos{% endif %}
+    {% if request.GET.fecha %} | Fecha: {{ request.GET.fecha }}{% endif %}
+    {% if request.GET.con_stock %} | Solo con stock{% endif %}
+</small>
 {% endblock %}
 
 {% block report_content %}
 <div class="no-print filters">
     <form method="get">
-        <label>
-            Fecha de corte:
-            <input type="date" name="fecha" value="{{ request.GET.fecha|default:today }}">
-        </label>
-        <label>
-            <input type="checkbox" name="con_stock" value="1" {% if request.GET.con_stock == '1' %}checked{% endif %}>
-            Solo productos con stock
-        </label>
-        <label>
-            <input type="checkbox" name="activos" value="1" {% if solo_activos %}checked{% endif %}>
-            Solo productos activos
-        </label>
+        <label>Fecha de corte: <input type="date" name="fecha" value="{{ request.GET.fecha|default:today }}"></label>
+        <label><input type="checkbox" name="con_stock" value="1" {% if request.GET.con_stock == '1' %}checked{% endif %}> Solo productos con stock</label>
+        <label><input type="checkbox" name="activos" value="1" {% if solo_activos %}checked{% endif %}> Solo productos activos</label>
         <button type="submit">Actualizar</button>
     </form>
 </div>
@@ -34,8 +25,8 @@
         <tr>
             <th>Código</th>
             <th>Producto</th>
+            <th>U/M</th>
             <th class="text-right">Stock</th>
-            <th class="text-center">U/M</th>
             <th class="text-right">Costo Unit.</th>
             <th class="text-right">Precio Unit.</th>
             <th class="text-right">Valor al Costo</th>
@@ -43,29 +34,36 @@
         </tr>
     </thead>
     <tbody>
-        {% for p in productos %}
-        <tr>
-            <td>{{ p.codigo }}</td>
-            <td>{{ p.nombre }}</td>
-            <td class="text-right">{{ p.stock_actual|formato_cantidad }}</td>
-            <td class="text-center">{{ p.unidad }}</td>
-            <td class="text-right">{{ p.costo_promedio|formato_costo }}</td>
-            <td class="text-right">{{ p.precio_venta|default_if_none:''|formato_costo }}</td>
-            <td class="text-right">{{ p.valor_costo|formato_moneda:"USD" }}</td>
-            <td class="text-right">{{ p.valor_venta|formato_moneda:"USD" }}</td>
+        {% for grupo in categorias_data %}
+        <tr class="group-header"><td colspan="8">{{ grupo.categoria }}</td></tr>
+            {% for p in grupo.productos %}
+            <tr>
+                <td>{{ p.codigo }}</td>
+                <td>{{ p.nombre }}</td>
+                <td>{{ p.unidad }}</td>
+                <td class="text-right">{{ p.stock_actual|formato_cantidad }}</td>
+                <td class="text-right">{{ p.costo_promedio|formato_costo }}</td>
+                <td class="text-right">{{ p.precio_venta|default_if_none:''|formato_costo }}</td>
+                <td class="text-right">{{ p.valor_costo|formato_moneda:'USD' }}</td>
+                <td class="text-right">{{ p.valor_venta|formato_moneda:'USD' }}</td>
+            </tr>
+            {% endfor %}
+        <tr class="group-subtotal">
+            <td colspan="6" class="text-right">Subtotal {{ grupo.categoria }}</td>
+            <td class="text-right">{{ grupo.subtotal_costo|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ grupo.subtotal_venta|formato_moneda:'USD' }}</td>
         </tr>
         {% empty %}
-        <tr>
-            <td colspan="8" class="text-center">No se encontraron productos.</td>
-        </tr>
+        <tr><td colspan="8" class="text-center">No se encontraron productos.</td></tr>
         {% endfor %}
     </tbody>
     <tfoot>
         <tr class="total-row">
             <td colspan="6" class="text-right">Totales</td>
-            <td class="text-right">{{ total_costo|formato_moneda:"USD" }}</td>
-            <td class="text-right">{{ total_venta|formato_moneda:"USD" }}</td>
+            <td class="text-right">{{ total_costo|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ total_venta|formato_moneda:'USD' }}</td>
         </tr>
     </tfoot>
 </table>
 {% endblock %}
+

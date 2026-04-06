@@ -1,96 +1,151 @@
-{% extends 'reportes/base_reporte.html' %}
-{% load humanize custom_filters %}
+﻿{% extends 'reportes/base_reporte.html' %}
+{% load custom_filters %}
 
 {% block report_title %}
-    Reporte de ProducciÃ³n
-    <br><small>
-        {% if fecha_desde %}Desde: {{ fecha_desde }} {% endif %}
-        {% if fecha_hasta %}Hasta: {{ fecha_hasta }} {% endif %}
-    </small>
+Reporte de Producción
+<br><small>
+    {% if fecha_desde %}Desde: {{ fecha_desde }} {% endif %}
+    {% if fecha_hasta %}Hasta: {{ fecha_hasta }} {% endif %}
+</small>
 {% endblock %}
 
 {% block report_content %}
 <div class="no-print filters">
-    <form method="get">
-        <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
-        <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}"></label>
-        <label>Producto:
-            <select name="producto" multiple>
-                {% for p in productos %}
-                <option value="{{ p.id }}" {% if p.id|stringformat:'s' in producto_ids %}selected{% endif %}>{{ p.codigo }} - {{ p.nombre }}</option>
-                {% endfor %}
+    <form method="get" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;align-items:end;">
+        <label>Desde
+            <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}">
+        </label>
+        <label>Hasta
+            <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}">
+        </label>
+        <label>Producto o insumo
+            <input type="search" name="producto_q" value="{{ producto_q }}" placeholder="Nombre o código">
+        </label>
+        <label>Vista
+            <select name="modo">
+                <option value="detallado" {% if modo == 'detallado' %}selected{% endif %}>Detallado por orden</option>
+                <option value="consolidado" {% if modo == 'consolidado' %}selected{% endif %}>Resumen consolidado</option>
             </select>
         </label>
-        <button type="submit">Generar Reporte</button>
+        <label><input type="checkbox" name="incluir_consumos" value="1" {% if incluir_consumos %}checked{% endif %}> Incluir consumos</label>
+        <label><input type="checkbox" name="incluir_productos" value="1" {% if incluir_productos %}checked{% endif %}> Incluir productos</label>
+        <div><button type="submit">Actualizar</button></div>
     </form>
 </div>
 
-<table>
-    <thead>
-        <tr>
-            <th>No. Orden</th>
-            <th>Fecha</th>
-            <th>Estado</th>
-            <th class="text-right">Costo Total MP (USD)</th>
-            <th>Producto Obtenido</th>
-            <th class="text-right">Cant. FÃ­sica</th>
-            <th>Unidad</th>
-            <th class="text-right">Kg Totales</th>
-            <th class="text-right">Costo Asignado</th>
-            <th class="text-right">Costo Unitario USD</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for orden in ordenes %}
-            {% if orden.salidas.all %}
-                {% for sal in orden.salidas.all %}
-                <tr>
-                    {% if forloop.first %}
-                    <td rowspan="{{ orden.salidas.all|length }}">{{ orden.numero }}</td>
-                    <td rowspan="{{ orden.salidas.all|length }}">{{ orden.fecha_apertura|date:"Y-m-d" }}</td>
-                    <td rowspan="{{ orden.salidas.all|length }}">{{ orden.estado }}</td>
-                    <td rowspan="{{ orden.salidas.all|length }}" class="text-right">{{ orden.mp_total|formato_moneda:"USD" }}</td>
-                    {% endif %}
-                    <td>{{ sal.producto.nombre }} {% if sal.es_subproducto %}(Subprod){% endif %}</td>
-                    <td class="text-right">{{ sal.cantidad|formato_cantidad }}</td>
-                    <td>{{ sal.producto.unidad_medida.simbolo }}</td>
-                    <td class="text-right">{% if sal.kg_totales %}{{ sal.kg_totales|formato_cantidad }}{% else %}-{% endif %}</td>
-                    <td class="text-right">{{ sal.costo_asignado|default:"0.00"|formato_moneda:"USD" }}</td>
-                    <td class="text-right">{{ sal.cu|default:"0.000000"|formato_costo }}</td>
+{% if modo == 'consolidado' %}
+    <p style="margin-bottom:12px;"><strong>Órdenes incluidas:</strong> {{ total_ordenes }}</p>
+    {% if incluir_consumos and consumos_consolidados %}
+    <h3>Consumos Consolidados</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Producto</th>
+                <th>Unidad</th>
+                <th class="text-right">Cantidad</th>
+                <th class="text-right">Costo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in consumos_consolidados %}
+            <tr>
+                <td>{{ item.producto__codigo }}</td>
+                <td>{{ item.producto__nombre }}</td>
+                <td>{{ item.producto__unidad_medida__simbolo }}</td>
+                <td class="text-right">{{ item.total_cantidad|formato_cantidad }}</td>
+                <td class="text-right">{{ item.total_costo|formato_moneda:'USD' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot><tr class="total-row"><td colspan="4" class="text-right">Total Consumos</td><td class="text-right">{{ total_consumos_costo|formato_moneda:'USD' }}</td></tr></tfoot>
+    </table>
+    {% endif %}
+
+    {% if incluir_productos and productos_consolidados %}
+    <h3>Productos Consolidados</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Producto</th>
+                <th>Unidad</th>
+                <th class="text-right">Cantidad</th>
+                <th class="text-right">Costo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in productos_consolidados %}
+            <tr>
+                <td>{{ item.producto__codigo }}</td>
+                <td>{{ item.producto__nombre }}</td>
+                <td>{{ item.producto__unidad_medida__simbolo }}</td>
+                <td class="text-right">{{ item.total_cantidad|formato_cantidad }}</td>
+                <td class="text-right">{{ item.total_costo|formato_moneda:'USD' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+{% else %}
+    <table>
+        <thead>
+            <tr>
+                <th>Orden</th>
+                <th>Fecha</th>
+                <th>Estado</th>
+                <th class="text-right">Costo MP</th>
+                <th class="text-right">Rendimiento</th>
+                <th class="text-right">Costo Productos</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for orden in ordenes %}
+            <tr>
+                <td>{{ orden.numero }}</td>
+                <td>{{ orden.fecha_apertura|date:'Y-m-d' }}</td>
+                <td>{{ orden.estado }}</td>
+                <td class="text-right">{{ orden.mp_total|formato_moneda:'USD' }}</td>
+                <td class="text-right">{{ orden.yield_display|formato_numero }}</td>
+                <td class="text-right">{{ orden.total_productos|formato_moneda:'USD' }}</td>
+            </tr>
+            {% if incluir_consumos %}
+            <tr><td colspan="6" style="background:#f6f6f6;"><strong>Consumos</strong></td></tr>
+                {% for consumo in orden.consumos_reporte %}
+                <tr style="background:#fafafa;">
+                    <td></td>
+                    <td colspan="2">{{ consumo.producto.codigo }} - {{ consumo.producto.nombre }}</td>
+                    <td class="text-right">{{ consumo.subtotal|formato_moneda:'USD' }}</td>
+                    <td class="text-right">{{ consumo.cantidad_consumida|formato_cantidad }}</td>
+                    <td class="text-right">{{ consumo.costo_unitario_display|formato_costo }}</td>
                 </tr>
                 {% endfor %}
-                <tr class="group-subtotal">
-                    <td colspan="3" class="text-right"><strong>Subtotal {{ orden.numero }}</strong></td>
-                    <td class="text-right"><strong>{{ orden.mp_total|formato_moneda:"USD" }}</strong></td>
-                    <td colspan="4"></td>
-                    <td class="text-right"><strong>{{ orden.costo_total|formato_moneda:"USD" }}</strong></td>
-                    <td></td>
-                </tr>
-            {% else %}
-                <tr>
-                    <td>{{ orden.numero }}</td>
-                    <td>{{ orden.fecha_apertura|date:"Y-m-d" }}</td>
-                    <td>{{ orden.estado }}</td>
-                    <td class="text-right">{{ orden.mp_total|formato_moneda:"USD" }}</td>
-                    <td colspan="6" class="text-center">Sin salidas registradas</td>
-                </tr>
             {% endif %}
-        {% empty %}
-        <tr>
-            <td colspan="10" class="text-center">No se encontraron órdenes de producción en el rango.</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-    {% if ordenes %}
-    <tfoot>
-        <tr class="total-row">
-            <td colspan="3" class="text-right"><strong>TOTAL GENERAL</strong></td>
-            <td class="text-right"><strong>{{ total_general_mp|formato_moneda:"USD" }}</strong></td>
-            <td colspan="4"></td>
-            <td class="text-right"><strong>{{ total_general_costo|formato_moneda:"USD" }}</strong></td>
-            <td></td>
-        </tr>
-    </tfoot>
-    {% endif %}
-</table>
+            {% if incluir_productos %}
+            <tr><td colspan="6" style="background:#f0fbf6;"><strong>Productos Terminados</strong></td></tr>
+                {% for salida in orden.salidas_reporte %}
+                <tr style="background:#fcfffd;">
+                    <td></td>
+                    <td colspan="2">{{ salida.producto.codigo }} - {{ salida.producto.nombre }}</td>
+                    <td class="text-right">{{ salida.costo_asignado|default:'0.00'|formato_moneda:'USD' }}</td>
+                    <td class="text-right">{{ salida.cantidad|formato_cantidad }}</td>
+                    <td class="text-right">{{ salida.cu|formato_costo }}</td>
+                </tr>
+                {% endfor %}
+            {% endif %}
+            {% empty %}
+            <tr><td colspan="6" class="text-center">No se encontraron órdenes en el rango seleccionado.</td></tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="3" class="text-right">Totales</td>
+                <td class="text-right">{{ total_general_mp|formato_moneda:'USD' }}</td>
+                <td></td>
+                <td class="text-right">{{ total_general_productos|formato_moneda:'USD' }}</td>
+            </tr>
+        </tfoot>
+    </table>
+{% endif %}
 {% endblock %}
+

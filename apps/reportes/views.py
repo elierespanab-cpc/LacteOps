@@ -53,143 +53,237 @@ def _estatus_por_saldo(saldo, total, etiqueta_cero, etiqueta_parcial, etiqueta_p
     return etiqueta_pendiente
 
 
+def _decimal(value, default="0.00"):
+    return Decimal(str(value if value is not None else default))
+
+
+def _quantize_money(value):
+    return _decimal(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _monto_usd_gasto(gasto):
+    monto_usd = _decimal(getattr(gasto, "monto_usd", Decimal("0.00")))
+    if monto_usd > 0:
+        return _quantize_money(monto_usd)
+    return _monto_usd_linea(gasto.monto, gasto.moneda, gasto.tasa_cambio)
+
+
+def _resumen_factura_venta(factura, hasta=None):
+    total = _quantize_money(factura.total)
+    cobrado = sum(
+        (_decimal(cobro.monto) for cobro in factura.cobros.all() if not hasta or cobro.fecha <= hasta),
+        Decimal("0.00"),
+    )
+    nc_emitidas = sum(
+        (
+            _decimal(nc.total)
+            for nc in factura.notas_credito.all()
+            if nc.estado == "EMITIDA" and (not hasta or nc.fecha <= hasta) and nc.total is not None
+        ),
+        Decimal("0.00"),
+    )
+    saldo = max(Decimal("0.00"), total - cobrado - nc_emitidas)
+    return {
+        "total": _quantize_money(total),
+        "cobrado": _quantize_money(cobrado),
+        "nc_emitidas": _quantize_money(nc_emitidas),
+        "saldo": _quantize_money(saldo),
+    }
+
+
+def _resumen_factura_compra(factura, hasta=None):
+    total = _quantize_money(factura.total)
+    pagado_individual = sum(
+        (
+            _decimal(pago.monto_usd)
+            for pago in factura.pagos.all()
+            if (not hasta or pago.fecha <= hasta) and pago.monto_usd is not None
+        ),
+        Decimal("0.00"),
+    )
+    pagado_consolidado = sum(
+        (
+            _decimal(detalle.monto_aplicado)
+            for detalle in factura.detalle_pagos.select_related("pago").all()
+            if not hasta or detalle.pago.fecha <= hasta
+        ),
+        Decimal("0.00"),
+    )
+    pagado = pagado_individual + pagado_consolidado
+    saldo = max(Decimal("0.00"), total - pagado)
+    return {
+        "total": _quantize_money(total),
+        "pagado": _quantize_money(pagado),
+        "saldo": _quantize_money(saldo),
+    }
+
+
 @login_required
 def reporte_ventas(request):
     _check_reporte_perm(request)  # B9
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_desde = request.GET.get("fecha_desde")
     fecha_hasta = request.GET.get("fecha_hasta")
-    clientes_ids = request.GET.getlist("cliente")
-    productos_ids = request.GET.getlist("articulo")
-    estados = request.GET.getlist("estado")
+    cliente_q = request.GET.get("cliente_q", "").strip()
+    articulo_q = request.GET.get("articulo_q", "").strip()
+    estado_pago = request.GET.get("estado_pago", "").strip()
+    estado_factura = request.GET.get("estado_factura", "").strip()
     agrupar_por_cliente = request.GET.get("agrupar_por_cliente") == "1"
+    mostrar_detalles = request.GET.get("mostrar_detalles") == "1"
+    sort_by = request.GET.get("sort_by", "fecha")
+    sort_dir = request.GET.get("sort_dir", "desc")
 
-    qs = DetalleFacturaVenta.objects.select_related(
-        "factura", "factura__cliente", "producto"
-    ).all()
+    qs = (
+        FacturaVenta.objects.exclude(estado="ANULADA")
+        .select_related("cliente")
+        .prefetch_related("cobros", "notas_credito", "detalles__producto")
+    )
 
     if fecha_desde:
-        qs = qs.filter(factura__fecha__gte=fecha_desde)
+        qs = qs.filter(fecha__gte=fecha_desde)
     if fecha_hasta:
-        qs = qs.filter(factura__fecha__lte=fecha_hasta)
-    if clientes_ids:
-        qs = qs.filter(factura__cliente_id__in=clientes_ids)
-    if productos_ids:
-        qs = qs.filter(producto_id__in=productos_ids)
-    if estados:
-        qs = qs.filter(factura__estado__in=estados)
-
-    if agrupar_por_cliente:
-        detalles = list(
-            qs.order_by("factura__cliente__nombre", "factura__fecha", "factura__numero")
+        qs = qs.filter(fecha__lte=fecha_hasta)
+    if cliente_q:
+        qs = qs.filter(
+            Q(cliente__nombre__icontains=cliente_q) | Q(cliente__rif__icontains=cliente_q)
         )
-    else:
-        detalles = list(qs.order_by("factura__fecha", "factura__numero"))
+    if articulo_q:
+        qs = qs.filter(
+            Q(detallefacturaventa__producto__nombre__icontains=articulo_q)
+            | Q(detallefacturaventa__producto__codigo__icontains=articulo_q)
+        ).distinct()
+    if estado_factura:
+        qs = qs.filter(estado=estado_factura)
 
-    filas = []
+    facturas = []
     total_general = Decimal("0.00")
-    subtotal_cliente = Decimal("0.00")
-    cliente_actual = None
-    cliente_actual_nombre = ""
-    cliente_actual_rif = ""
-
-    for detalle in detalles:
-        detalle.monto_usd = _monto_usd_linea(
-            detalle.subtotal, detalle.factura.moneda, detalle.factura.tasa_cambio
-        )
-        detalle.estatus_cobro = _estatus_por_saldo(
-            detalle.factura.get_saldo_pendiente(),
-            detalle.factura.total,
+    total_pagado = Decimal("0.00")
+    total_pendiente = Decimal("0.00")
+    for factura in qs:
+        resumen = _resumen_factura_venta(factura)
+        factura.estado_pago = _estatus_por_saldo(
+            resumen["saldo"],
+            resumen["total"],
             "Cobrada",
             "Parcialmente Pendiente",
             "Pendiente",
         )
+        if estado_pago and factura.estado_pago != estado_pago:
+            continue
+        factura.total_pagado = resumen["cobrado"]
+        factura.nc_emitidas_total = resumen["nc_emitidas"]
+        factura.saldo_pendiente_total = resumen["saldo"]
+        factura.detalles_reporte = list(factura.detalles.all())
+        for detalle in factura.detalles_reporte:
+            detalle.monto_usd = _monto_usd_linea(
+                detalle.subtotal, factura.moneda, factura.tasa_cambio
+            )
+            detalle.estatus_cobro = factura.estado_pago
+        total_general += resumen["total"]
+        total_pagado += resumen["cobrado"]
+        total_pendiente += resumen["saldo"]
+        facturas.append(factura)
 
-        if agrupar_por_cliente:
-            cliente = detalle.factura.cliente
-            cliente_id = cliente.pk if cliente else None
-            nombre_cliente = cliente.nombre if cliente else "Sin cliente"
-            rif_cliente = cliente.rif if cliente else ""
+    sort_map = {
+        "fecha": lambda f: (f.fecha, f.numero),
+        "numero": lambda f: (f.numero,),
+        "cliente": lambda f: ((f.cliente.nombre if f.cliente else "").lower(), f.fecha, f.numero),
+    }
+    facturas.sort(key=sort_map.get(sort_by, sort_map["fecha"]), reverse=(sort_dir == "desc"))
 
+    filas = []
+    if agrupar_por_cliente:
+        cliente_nombre = ""
+        cliente_rif = ""
+        cliente_actual = None
+        subtotal_total = Decimal("0.00")
+        subtotal_pagado = Decimal("0.00")
+        subtotal_pendiente = Decimal("0.00")
+        for factura in facturas:
             if cliente_actual is None:
-                cliente_actual = cliente_id
-                cliente_actual_nombre = nombre_cliente
-                cliente_actual_rif = rif_cliente
-            elif cliente_actual != cliente_id:
+                cliente_actual = factura.cliente_id
+            elif cliente_actual != factura.cliente_id:
                 filas.append(
                     {
                         "tipo": "subtotal",
-                        "cliente": cliente_actual_nombre,
-                        "rif": cliente_actual_rif,
-                        "monto_total": subtotal_cliente,
+                        "cliente": cliente_nombre,
+                        "rif": cliente_rif,
+                        "total": subtotal_total,
+                        "pagado": subtotal_pagado,
+                        "pendiente": subtotal_pendiente,
                     }
                 )
-                subtotal_cliente = Decimal("0.00")
-                cliente_actual = cliente_id
-                cliente_actual_nombre = nombre_cliente
-                cliente_actual_rif = rif_cliente
-
-            subtotal_cliente += detalle.monto_usd
-
-        total_general += detalle.monto_usd
-        filas.append({"tipo": "detalle", "detalle": detalle})
-
-    if agrupar_por_cliente and cliente_actual is not None:
-        filas.append(
-            {
-                "tipo": "subtotal",
-                "cliente": cliente_actual_nombre,
-                "rif": cliente_actual_rif,
-                "monto_total": subtotal_cliente,
-            }
-        )
+                subtotal_total = Decimal("0.00")
+                subtotal_pagado = Decimal("0.00")
+                subtotal_pendiente = Decimal("0.00")
+                cliente_actual = factura.cliente_id
+            cliente_nombre = factura.cliente.nombre if factura.cliente else "Sin cliente"
+            cliente_rif = factura.cliente.rif if factura.cliente else ""
+            subtotal_total += factura.total
+            subtotal_pagado += factura.total_pagado
+            subtotal_pendiente += factura.saldo_pendiente_total
+            filas.append({"tipo": "factura", "factura": factura})
+            for detalle in factura.detalles_reporte:
+                filas.append({"tipo": "detalle", "detalle": detalle, "factura": factura})
+        if facturas:
+            filas.append(
+                {
+                    "tipo": "subtotal",
+                    "cliente": cliente_nombre,
+                    "rif": cliente_rif,
+                    "total": subtotal_total,
+                    "pagado": subtotal_pagado,
+                    "pendiente": subtotal_pendiente,
+                }
+            )
+    else:
+        filas = []
+        for factura in facturas:
+            filas.append({"tipo": "factura", "factura": factura})
+            for detalle in factura.detalles_reporte:
+                filas.append({"tipo": "detalle", "detalle": detalle, "factura": factura})
 
     parametros = {}
     if fecha_desde:
         parametros["Desde"] = fecha_desde
     if fecha_hasta:
         parametros["Hasta"] = fecha_hasta
-    if clientes_ids:
-        parametros["Clientes"] = ", ".join(clientes_ids)
-    if productos_ids:
-        parametros["Productos"] = ", ".join(productos_ids)
-    if estados:
-        parametros["Estados"] = ", ".join(estados)
+    if cliente_q:
+        parametros["Cliente"] = cliente_q
+    if articulo_q:
+        parametros["Articulo"] = articulo_q
+    if estado_pago:
+        parametros["Estado pago"] = estado_pago
+    if estado_factura:
+        parametros["Estado factura"] = estado_factura
     if agrupar_por_cliente:
-        parametros["Agrupar por cliente"] = "Sí"
+        parametros["Agrupar por cliente"] = "Si"
 
     if "exportar" in request.GET:
         columnas = [
             "Numero",
             "Fecha",
             "Cliente",
-            "Articulo",
-            "Cantidad",
-            "Precio Unitario",
-            "Subtotal",
-            "Moneda",
-            "Monto USD",
-            "Estatus",
-            "Estado",
+            "Total",
+            "Cobrado",
+            "NC",
+            "Pendiente",
+            "Estado de Pago",
+            "Estado Factura",
         ]
         filas_export = []
-        for d in detalles:
-            monto_usd = _monto_usd_linea(
-                d.subtotal, d.factura.moneda, d.factura.tasa_cambio
-            )
+        for factura in facturas:
             filas_export.append(
                 [
-                    d.factura.numero,
-                    d.factura.fecha,
-                    d.factura.cliente.nombre if d.factura.cliente else "",
-                    f"{d.producto.codigo} - {d.producto.nombre}",
-                    d.cantidad,
-                    d.precio_unitario,
-                    d.subtotal,
-                    d.factura.moneda,
-                    monto_usd,
-                    d.estatus_cobro,
-                    d.factura.estado,
+                    factura.numero,
+                    factura.fecha,
+                    factura.cliente.nombre if factura.cliente else "",
+                    factura.total,
+                    factura.total_pagado,
+                    factura.nc_emitidas_total,
+                    factura.saldo_pendiente_total,
+                    factura.estado_pago,
+                    factura.estado,
                 ]
             )
         return exportar_excel(
@@ -200,17 +294,6 @@ def reporte_ventas(request):
             parametros=parametros,
         )
 
-    # Filtro post-proceso por estatus cobro
-    estatus_cobro_filtro = request.GET.get("estatus_cobro", "")
-    if estatus_cobro_filtro:
-        filas = [
-            f for f in filas
-            if f["tipo"] == "subtotal" or f["detalle"].estatus_cobro == estatus_cobro_filtro
-        ]
-        total_general = sum(
-            f["detalle"].monto_usd for f in filas if f["tipo"] == "detalle"
-        )
-
     context = {
         "empresa": empresa,
         "fecha_desde": fecha_desde,
@@ -218,12 +301,15 @@ def reporte_ventas(request):
         "agrupar_por_cliente": agrupar_por_cliente,
         "filas": filas,
         "total_general": total_general,
-        "clientes_ids": clientes_ids,
-        "productos_ids": productos_ids,
-        "estados": estados,
-        "estatus_cobro_filtro": estatus_cobro_filtro,
-        "clientes": Cliente.objects.all(),
-        "productos": Producto.objects.all(),
+        "total_pagado": total_pagado,
+        "total_pendiente": total_pendiente,
+        "cliente_q": cliente_q,
+        "articulo_q": articulo_q,
+        "estado_pago": estado_pago,
+        "estado_factura": estado_factura,
+        "mostrar_detalles": mostrar_detalles,
+        "sort_by": sort_by,
+        "sort_dir": sort_dir,
     }
     return render(request, "reportes/ventas.html", context)
 
@@ -233,13 +319,16 @@ def reporte_cxc(request):
     _check_reporte_perm(request)  # B9
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_corte = request.GET.get("fecha_corte")
+    agrupar_por_cliente = request.GET.get("agrupar_por_cliente") == "1"
+    mostrar_aging = request.GET.get("mostrar_aging") == "1"
+    sort_by = request.GET.get("sort_by", "cliente")
+    sort_dir = request.GET.get("sort_dir", "asc")
     hasta = (
         datetime.datetime.strptime(fecha_corte, "%Y-%m-%d").date()
         if fecha_corte
         else datetime.date.today()
     )
 
-    # DIM-06-001: incluye EMITIDA y COBRADA (puede haber cobro parcial en COBRADA)
     facturas = (
         FacturaVenta.objects.filter(estado__in=["EMITIDA", "COBRADA"], fecha__lte=hasta)
         .select_related("cliente")
@@ -260,67 +349,64 @@ def reporte_cxc(request):
     }
 
     for fv in facturas:
-        # B7.1-CxC: usar monto_usd (nunca None, puede ser 0.00) sin filtrar por truthy.
-        # Antes: "if c.monto_usd" omitía cobros VES con monto_usd=0 causando diferencia USD 6.64.
-        monto_cobrado = sum(
-            Decimal(str(c.monto_usd))
-            for c in fv.cobros.all()
-            if c.fecha <= hasta
+        resumen = _resumen_factura_venta(fv, hasta=hasta)
+        neto_pendiente = resumen["saldo"]
+        if neto_pendiente <= 0:
+            continue
+        dias_vencida = (hasta - fv.fecha_vencimiento).days if fv.fecha_vencimiento else 0
+        if dias_vencida < 0:
+            dias_vencida = 0
+        saldo_0_30 = neto_pendiente if 0 <= dias_vencida <= 30 else Decimal("0.00")
+        saldo_31_60 = neto_pendiente if 31 <= dias_vencida <= 60 else Decimal("0.00")
+        saldo_61_90 = neto_pendiente if 61 <= dias_vencida <= 90 else Decimal("0.00")
+        saldo_90_plus = neto_pendiente if dias_vencida > 90 else Decimal("0.00")
+        resultados.append(
+            {
+                "factura": fv,
+                "total": resumen["total"],
+                "monto_cobrado": resumen["cobrado"],
+                "nc_emitidas": resumen["nc_emitidas"],
+                "neto_pendiente": neto_pendiente,
+                "dias_vencida": dias_vencida,
+                "s_0_30": saldo_0_30,
+                "s_31_60": saldo_31_60,
+                "s_61_90": saldo_61_90,
+                "s_90_plus": saldo_90_plus,
+            }
         )
-        nc_emitidas = sum(
-            Decimal(str(nc.total))
-            for nc in fv.notas_credito.all()
-            if nc.estado == "EMITIDA" and nc.fecha <= hasta and nc.total is not None
-        )
-        neto_pendiente = max(
-            Decimal("0.00"), Decimal(str(fv.total)) - monto_cobrado - nc_emitidas
-        )
-        if neto_pendiente > 0:
-            dias_vencida = (
-                (hasta - fv.fecha_vencimiento).days if fv.fecha_vencimiento else 0
-            )
-            if dias_vencida < 0:
-                dias_vencida = 0
+        totales["total"] += resumen["total"]
+        totales["cobrado"] += resumen["cobrado"]
+        totales["nc"] += resumen["nc_emitidas"]
+        totales["neto_pendiente"] += neto_pendiente
+        totales["pendiente"] += neto_pendiente
+        totales["s_0_30"] += saldo_0_30
+        totales["s_31_60"] += saldo_31_60
+        totales["s_61_90"] += saldo_61_90
+        totales["s_90_plus"] += saldo_90_plus
 
-            saldo_0_30 = neto_pendiente if 0 <= dias_vencida <= 30 else Decimal("0.00")
-            saldo_31_60 = neto_pendiente if 31 <= dias_vencida <= 60 else Decimal("0.00")
-            saldo_61_90 = neto_pendiente if 61 <= dias_vencida <= 90 else Decimal("0.00")
-            saldo_90_plus = neto_pendiente if dias_vencida > 90 else Decimal("0.00")
+    sort_map = {
+        "cliente": lambda item: ((item["factura"].cliente.nombre if item["factura"].cliente else "").lower(), item["factura"].fecha, item["factura"].numero),
+        "fecha": lambda item: (item["factura"].fecha, item["factura"].numero),
+        "numero": lambda item: (item["factura"].numero,),
+        "saldo": lambda item: (item["neto_pendiente"], item["factura"].numero),
+    }
+    resultados.sort(key=sort_map.get(sort_by, sort_map["cliente"]), reverse=(sort_dir == "desc"))
 
-            resultados.append(
-                {
-                    "factura": fv,
-                    "total": Decimal(str(fv.total)),
-                    "monto_cobrado": monto_cobrado,
-                    "nc_emitidas": nc_emitidas,
-                    "neto_pendiente": neto_pendiente,
-                    "dias_vencida": dias_vencida,
-                    "s_0_30": saldo_0_30,
-                    "s_31_60": saldo_31_60,
-                    "s_61_90": saldo_61_90,
-                    "s_90_plus": saldo_90_plus,
-                }
-            )
-            totales["total"] += Decimal(str(fv.total))
-            totales["cobrado"] += monto_cobrado
-            totales["nc"] += nc_emitidas
-            totales["neto_pendiente"] += neto_pendiente
-            totales["pendiente"] += neto_pendiente
-            totales["s_0_30"] += saldo_0_30
-            totales["s_31_60"] += saldo_31_60
-            totales["s_61_90"] += saldo_61_90
-            totales["s_90_plus"] += saldo_90_plus
+    grupos_cliente = []
+    if agrupar_por_cliente:
+        grupos = {}
+        for item in resultados:
+            cliente = item["factura"].cliente
+            key = cliente.pk if cliente else None
+            grupos.setdefault(key, {"cliente": cliente, "items": [], "subtotal": Decimal("0.00")})
+            grupos[key]["items"].append(item)
+            grupos[key]["subtotal"] += item["neto_pendiente"]
+        grupos_cliente = list(grupos.values())
+        grupos_cliente.sort(key=lambda grupo: (grupo["cliente"].nombre if grupo["cliente"] else ""))
 
-    resultados.sort(
-        key=lambda item: (
-            item["factura"].cliente.nombre if item["factura"].cliente else "",
-            item["factura"].fecha,
-            item["factura"].numero,
-        )
-    )
-
-    parametros = {}
-    parametros["Fecha corte"] = fecha_corte or str(hasta)
+    parametros = {"Fecha corte": fecha_corte or str(hasta)}
+    if agrupar_por_cliente:
+        parametros["Agrupar por cliente"] = "Si"
 
     if "exportar" in request.GET:
         columnas = [
@@ -371,6 +457,11 @@ def reporte_cxc(request):
         "fecha_corte": hasta,
         "resultados": resultados,
         "totales": totales,
+        "agrupar_por_cliente": agrupar_por_cliente,
+        "grupos_cliente": grupos_cliente,
+        "mostrar_aging": mostrar_aging,
+        "sort_by": sort_by,
+        "sort_dir": sort_dir,
     }
     return render(request, "reportes/cxc.html", context)
 
@@ -381,135 +472,163 @@ def reporte_compras(request):
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_desde = request.GET.get("fecha_desde")
     fecha_hasta = request.GET.get("fecha_hasta")
-    proveedor_ids = request.GET.getlist("proveedor")
-    productos_ids = request.GET.getlist("articulo")
-    estados = request.GET.getlist("estado")
+    proveedor_q = request.GET.get("proveedor_q", "").strip()
+    articulo_q = request.GET.get("articulo_q", "").strip()
+    estado_pago = request.GET.get("estado_pago", "").strip()
+    estado_factura = request.GET.get("estado_factura", "").strip()
     agrupar_por_proveedor = request.GET.get("agrupar_por_proveedor") == "1"
+    mostrar_detalles = request.GET.get("mostrar_detalles") == "1"
+    sort_by = request.GET.get("sort_by", "fecha")
+    sort_dir = request.GET.get("sort_dir", "desc")
 
-    qs = DetalleFacturaCompra.objects.select_related(
-        "factura", "factura__proveedor", "producto"
-    ).all()
+    qs = (
+        FacturaCompra.objects.exclude(estado="ANULADA")
+        .select_related("proveedor")
+        .prefetch_related("pagos", "detalle_pagos__pago", "detalles__producto")
+    )
 
     if fecha_desde:
-        qs = qs.filter(factura__fecha__gte=fecha_desde)
+        qs = qs.filter(fecha__gte=fecha_desde)
     if fecha_hasta:
-        qs = qs.filter(factura__fecha__lte=fecha_hasta)
-    if proveedor_ids:
-        qs = qs.filter(factura__proveedor_id__in=proveedor_ids)
-    if productos_ids:
-        qs = qs.filter(producto_id__in=productos_ids)
-    if estados:
-        qs = qs.filter(factura__estado__in=estados)
-
-    if agrupar_por_proveedor:
-        detalles = list(
-            qs.order_by("factura__proveedor__nombre", "factura__fecha", "factura__numero")
+        qs = qs.filter(fecha__lte=fecha_hasta)
+    if proveedor_q:
+        qs = qs.filter(
+            Q(proveedor__nombre__icontains=proveedor_q) | Q(proveedor__rif__icontains=proveedor_q)
         )
-    else:
-        detalles = list(qs.order_by("factura__fecha", "factura__numero"))
+    if articulo_q:
+        qs = qs.filter(
+            Q(detalles__producto__nombre__icontains=articulo_q)
+            | Q(detalles__producto__codigo__icontains=articulo_q)
+        ).distinct()
+    if estado_factura:
+        qs = qs.filter(estado=estado_factura)
 
-    filas = []
+    facturas = []
     total_general = Decimal("0.00")
-    subtotal_proveedor = Decimal("0.00")
-    proveedor_actual = None
-    proveedor_actual_nombre = ""
-    proveedor_actual_rif = ""
-
-    for detalle in detalles:
-        detalle.monto_usd = _monto_usd_linea(
-            detalle.subtotal, detalle.factura.moneda, detalle.factura.tasa_cambio
-        )
-        detalle.estatus_pago = _estatus_por_saldo(
-            detalle.factura.get_saldo_pendiente(),
-            detalle.factura.total,
+    total_pagado = Decimal("0.00")
+    total_pendiente = Decimal("0.00")
+    for factura in qs:
+        resumen = _resumen_factura_compra(factura)
+        factura.estado_pago = _estatus_por_saldo(
+            resumen["saldo"],
+            resumen["total"],
             "Pagada",
             "Parcialmente Pendiente",
             "Pendiente",
         )
+        if estado_pago and factura.estado_pago != estado_pago:
+            continue
+        factura.total_pagado = resumen["pagado"]
+        factura.saldo_pendiente_total = resumen["saldo"]
+        factura.detalles_reporte = list(factura.detalles.all())
+        for detalle in factura.detalles_reporte:
+            detalle.monto_usd = _monto_usd_linea(
+                detalle.subtotal, factura.moneda, factura.tasa_cambio
+            )
+            detalle.estatus_cobro = factura.estado_pago
+        total_general += resumen["total"]
+        total_pagado += resumen["pagado"]
+        total_pendiente += resumen["saldo"]
+        facturas.append(factura)
 
-        if agrupar_por_proveedor:
-            proveedor = detalle.factura.proveedor
-            proveedor_id = proveedor.pk if proveedor else None
-            nombre_proveedor = proveedor.nombre if proveedor else "Sin proveedor"
-            rif_proveedor = proveedor.rif if proveedor else ""
+    sort_map = {
+        "fecha": lambda f: (f.fecha, f.numero),
+        "numero": lambda f: (f.numero,),
+        "proveedor": lambda f: ((f.proveedor.nombre if f.proveedor else "").lower(), f.fecha, f.numero),
+    }
+    facturas.sort(key=sort_map.get(sort_by, sort_map["fecha"]), reverse=(sort_dir == "desc"))
 
+    filas = []
+    if agrupar_por_proveedor:
+        proveedor_nombre = ""
+        proveedor_rif = ""
+        proveedor_actual = None
+        subtotal_total = Decimal("0.00")
+        subtotal_pagado = Decimal("0.00")
+        subtotal_pendiente = Decimal("0.00")
+        for factura in facturas:
             if proveedor_actual is None:
-                proveedor_actual = proveedor_id
-                proveedor_actual_nombre = nombre_proveedor
-                proveedor_actual_rif = rif_proveedor
-            elif proveedor_actual != proveedor_id:
+                proveedor_actual = factura.proveedor_id
+            elif proveedor_actual != factura.proveedor_id:
                 filas.append(
                     {
                         "tipo": "subtotal",
-                        "proveedor": proveedor_actual_nombre,
-                        "rif": proveedor_actual_rif,
-                        "monto_total": subtotal_proveedor,
+                        "proveedor": proveedor_nombre,
+                        "rif": proveedor_rif,
+                        "total": subtotal_total,
+                        "pagado": subtotal_pagado,
+                        "pendiente": subtotal_pendiente,
                     }
                 )
-                subtotal_proveedor = Decimal("0.00")
-                proveedor_actual = proveedor_id
-                proveedor_actual_nombre = nombre_proveedor
-                proveedor_actual_rif = rif_proveedor
-
-            subtotal_proveedor += detalle.monto_usd
-
-        total_general += detalle.monto_usd
-        filas.append({"tipo": "detalle", "detalle": detalle})
-
-    if agrupar_por_proveedor and proveedor_actual is not None:
-        filas.append(
-            {
-                "tipo": "subtotal",
-                "proveedor": proveedor_actual_nombre,
-                "rif": proveedor_actual_rif,
-                "monto_total": subtotal_proveedor,
-            }
-        )
+                subtotal_total = Decimal("0.00")
+                subtotal_pagado = Decimal("0.00")
+                subtotal_pendiente = Decimal("0.00")
+                proveedor_actual = factura.proveedor_id
+            proveedor_nombre = factura.proveedor.nombre if factura.proveedor else "Sin proveedor"
+            proveedor_rif = factura.proveedor.rif if factura.proveedor else ""
+            subtotal_total += factura.total
+            subtotal_pagado += factura.total_pagado
+            subtotal_pendiente += factura.saldo_pendiente_total
+            filas.append({"tipo": "factura", "factura": factura})
+            for detalle in factura.detalles_reporte:
+                filas.append({"tipo": "detalle", "detalle": detalle, "factura": factura})
+        if facturas:
+            filas.append(
+                {
+                    "tipo": "subtotal",
+                    "proveedor": proveedor_nombre,
+                    "rif": proveedor_rif,
+                    "total": subtotal_total,
+                    "pagado": subtotal_pagado,
+                    "pendiente": subtotal_pendiente,
+                }
+            )
+    else:
+        filas = []
+        for factura in facturas:
+            filas.append({"tipo": "factura", "factura": factura})
+            for detalle in factura.detalles_reporte:
+                filas.append({"tipo": "detalle", "detalle": detalle, "factura": factura})
 
     parametros = {}
     if fecha_desde:
         parametros["Desde"] = fecha_desde
     if fecha_hasta:
         parametros["Hasta"] = fecha_hasta
-    if proveedor_ids:
-        parametros["Proveedores"] = ", ".join(proveedor_ids)
-    if estados:
-        parametros["Estados"] = ", ".join(estados)
+    if proveedor_q:
+        parametros["Proveedor"] = proveedor_q
+    if articulo_q:
+        parametros["Articulo"] = articulo_q
+    if estado_pago:
+        parametros["Estado pago"] = estado_pago
+    if estado_factura:
+        parametros["Estado factura"] = estado_factura
     if agrupar_por_proveedor:
-        parametros["Agrupar por proveedor"] = "Sí"
+        parametros["Agrupar por proveedor"] = "Si"
 
     if "exportar" in request.GET:
         columnas = [
             "Numero",
             "Fecha",
             "Proveedor",
-            "Articulo",
-            "Cantidad",
-            "Costo Unitario",
-            "Subtotal",
-            "Moneda",
-            "Monto USD",
-            "Estatus",
-            "Estado",
+            "Total",
+            "Pagado",
+            "Pendiente",
+            "Estado de Pago",
+            "Estado Factura",
         ]
         filas_export = []
-        for d in detalles:
-            monto_usd = _monto_usd_linea(
-                d.subtotal, d.factura.moneda, d.factura.tasa_cambio
-            )
+        for factura in facturas:
             filas_export.append(
                 [
-                    d.factura.numero,
-                    d.factura.fecha,
-                    d.factura.proveedor.nombre if d.factura.proveedor else "",
-                    f"{d.producto.codigo} - {d.producto.nombre}",
-                    d.cantidad,
-                    d.costo_unitario,
-                    d.subtotal,
-                    d.factura.moneda,
-                    monto_usd,
-                    d.estatus_pago,
-                    d.factura.estado,
+                    factura.numero,
+                    factura.fecha,
+                    factura.proveedor.nombre if factura.proveedor else "",
+                    factura.total,
+                    factura.total_pagado,
+                    factura.saldo_pendiente_total,
+                    factura.estado_pago,
+                    factura.estado,
                 ]
             )
         return exportar_excel(
@@ -520,17 +639,6 @@ def reporte_compras(request):
             parametros=parametros,
         )
 
-    # Filtro post-proceso por estatus pago
-    estatus_pago_filtro = request.GET.get("estatus_pago", "")
-    if estatus_pago_filtro:
-        filas = [
-            f for f in filas
-            if f["tipo"] == "subtotal" or f["detalle"].estatus_pago == estatus_pago_filtro
-        ]
-        total_general = sum(
-            f["detalle"].monto_usd for f in filas if f["tipo"] == "detalle"
-        )
-
     context = {
         "empresa": empresa,
         "fecha_desde": fecha_desde,
@@ -538,12 +646,15 @@ def reporte_compras(request):
         "agrupar_por_proveedor": agrupar_por_proveedor,
         "filas": filas,
         "total_general": total_general,
-        "proveedor_ids": proveedor_ids,
-        "productos_ids": productos_ids,
-        "estados": estados,
-        "estatus_pago_filtro": estatus_pago_filtro,
-        "proveedores": Proveedor.objects.all(),
-        "productos": Producto.objects.all(),
+        "total_pagado": total_pagado,
+        "total_pendiente": total_pendiente,
+        "proveedor_q": proveedor_q,
+        "articulo_q": articulo_q,
+        "estado_pago": estado_pago,
+        "estado_factura": estado_factura,
+        "mostrar_detalles": mostrar_detalles,
+        "sort_by": sort_by,
+        "sort_dir": sort_dir,
     }
     return render(request, "reportes/compras.html", context)
 
@@ -551,13 +662,16 @@ def reporte_compras(request):
 @login_required
 def reporte_cxp(request):
     """
-    B3 — CxP con pagos parciales: usa annotate + Coalesce para calcular saldo.
-    Filtra facturas APROBADA (no RECIBIDA) porque los pagos van contra APROBADAS.
+    CxP sincronizado con FacturaCompra.get_saldo_pendiente() y pagos consolidados.
     """
     _check_reporte_perm(request)  # B9
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_corte = request.GET.get("fecha_corte")
     tipo_reporte = request.GET.get("tipo", "TODOS")
+    agrupar_por_proveedor = request.GET.get("agrupar_por_proveedor") == "1"
+    mostrar_aging = request.GET.get("mostrar_aging") == "1"
+    sort_by = request.GET.get("sort_by", "proveedor")
+    sort_dir = request.GET.get("sort_dir", "asc")
     hasta = (
         datetime.datetime.strptime(fecha_corte, "%Y-%m-%d").date()
         if fecha_corte
@@ -567,6 +681,7 @@ def reporte_cxp(request):
     resultados = []
     totales = {
         "total": Decimal("0.00"),
+        "pagado": Decimal("0.00"),
         "pendiente": Decimal("0.00"),
         "s_0_30": Decimal("0.00"),
         "s_31_60": Decimal("0.00"),
@@ -575,38 +690,29 @@ def reporte_cxp(request):
     }
 
     if tipo_reporte in ["TODOS", "COMPRAS"]:
-        # B3 fix: estado APROBADA + Coalesce para pagos parciales
         facturas = (
             FacturaCompra.objects.filter(estado="APROBADA", fecha__lte=hasta)
             .select_related("proveedor")
-            .annotate(
-                total_pagado=Coalesce(
-                    Sum("pagos__monto_usd"),
-                    Value(Decimal("0.00")),
-                    output_field=DecimalField(),
-                )
-            )
-            .annotate(saldo=F("total") - F("total_pagado"))
-            .filter(saldo__gt=0)
+            .prefetch_related("pagos", "detalle_pagos__pago")
         )
-
         for fv in facturas:
-            saldo = Decimal(str(fv.saldo))
-            dias_vencida = (
-                (hasta - fv.fecha_vencimiento).days if fv.fecha_vencimiento else 0
-            )
+            resumen = _resumen_factura_compra(fv, hasta=hasta)
+            saldo = resumen["saldo"]
+            if saldo <= 0:
+                continue
+            dias_vencida = (hasta - fv.fecha_vencimiento).days if fv.fecha_vencimiento else 0
             if dias_vencida < 0:
                 dias_vencida = 0
-
             s_0 = saldo if 0 <= dias_vencida <= 30 else Decimal("0.00")
             s_31 = saldo if 31 <= dias_vencida <= 60 else Decimal("0.00")
             s_61 = saldo if 61 <= dias_vencida <= 90 else Decimal("0.00")
             s_90 = saldo if dias_vencida > 90 else Decimal("0.00")
-
             resultados.append(
                 {
                     "es_gasto": False,
                     "documento": fv,
+                    "monto_original": resumen["total"],
+                    "monto_pagado": resumen["pagado"],
                     "saldo": saldo,
                     "dias": dias_vencida,
                     "s_0": s_0,
@@ -615,6 +721,8 @@ def reporte_cxp(request):
                     "s_90": s_90,
                 }
             )
+            totales["total"] += resumen["total"]
+            totales["pagado"] += resumen["pagado"]
             totales["pendiente"] += saldo
             totales["s_0_30"] += s_0
             totales["s_31_60"] += s_31
@@ -622,26 +730,22 @@ def reporte_cxp(request):
             totales["s_90_plus"] += s_90
 
     if tipo_reporte in ["TODOS", "GASTOS_SERVICIOS"]:
-        gastos = GastoServicio.objects.filter(
-            estado="PENDIENTE", fecha_emision__lte=hasta
-        ).select_related("proveedor")
+        gastos = GastoServicio.objects.filter(estado="PENDIENTE", fecha_emision__lte=hasta).select_related("proveedor")
         for gs in gastos:
-            saldo = Decimal(str(gs.monto_usd))
-            dias_vencida = (
-                (hasta - gs.fecha_vencimiento).days if gs.fecha_vencimiento else 0
-            )
+            saldo = _monto_usd_gasto(gs)
+            dias_vencida = (hasta - gs.fecha_vencimiento).days if gs.fecha_vencimiento else 0
             if dias_vencida < 0:
                 dias_vencida = 0
-
             s_0 = saldo if 0 <= dias_vencida <= 30 else Decimal("0.00")
             s_31 = saldo if 31 <= dias_vencida <= 60 else Decimal("0.00")
             s_61 = saldo if 61 <= dias_vencida <= 90 else Decimal("0.00")
             s_90 = saldo if dias_vencida > 90 else Decimal("0.00")
-
             resultados.append(
                 {
                     "es_gasto": True,
                     "documento": gs,
+                    "monto_original": saldo,
+                    "monto_pagado": Decimal("0.00"),
                     "saldo": saldo,
                     "dias": dias_vencida,
                     "s_0": s_0,
@@ -650,17 +754,16 @@ def reporte_cxp(request):
                     "s_90": s_90,
                 }
             )
+            totales["total"] += saldo
             totales["pendiente"] += saldo
             totales["s_0_30"] += s_0
             totales["s_31_60"] += s_31
             totales["s_61_90"] += s_61
             totales["s_90_plus"] += s_90
 
-    # Guardar resultados y totales de proveedores para el template
     resultados_proveedores = resultados
     totales_proveedores = dict(totales)
 
-    # Sección préstamos de socios
     from django.db.models import Sum as _Sum
     prestamos = PrestamoPorSocio.objects.filter(
         estado='ACTIVO'
@@ -691,6 +794,38 @@ def reporte_cxp(request):
         })
         total_socios += saldo
 
+    def _fecha_documento_cxp(item):
+        doc = item["documento"]
+        return (
+            getattr(doc, "fecha_vencimiento", None)
+            or getattr(doc, "fecha_emision", None)
+            or getattr(doc, "fecha", None)
+        )
+
+    sort_map = {
+        "proveedor": lambda item: (
+            (item["documento"].proveedor.nombre if item["documento"].proveedor else "").lower(),
+            _fecha_documento_cxp(item),
+            item["documento"].numero,
+        ),
+        "fecha": lambda item: (_fecha_documento_cxp(item), item["documento"].numero),
+        "numero": lambda item: (item["documento"].numero,),
+        "saldo": lambda item: (item["saldo"], item["documento"].numero),
+    }
+    resultados.sort(key=sort_map.get(sort_by, sort_map["proveedor"]), reverse=(sort_dir == "desc"))
+
+    grupos_proveedor = []
+    if agrupar_por_proveedor:
+        grupos = {}
+        for item in resultados:
+            proveedor = item["documento"].proveedor
+            key = proveedor.pk if proveedor else None
+            grupos.setdefault(key, {"proveedor": proveedor, "items": [], "subtotal": Decimal("0.00")})
+            grupos[key]["items"].append(item)
+            grupos[key]["subtotal"] += item["saldo"]
+        grupos_proveedor = list(grupos.values())
+        grupos_proveedor.sort(key=lambda grupo: (grupo["proveedor"].nombre if grupo["proveedor"] else ""))
+
     total_general_cxp = totales_proveedores['pendiente'] + total_socios
 
     parametros = {
@@ -716,15 +851,6 @@ def reporte_cxp(request):
         filas = []
         for item in resultados:
             doc = item["documento"]
-            monto_original = (
-                doc.monto_usd
-                if item["es_gasto"]
-                else (
-                    doc.total_usd
-                    if hasattr(doc, "total_usd") and doc.total_usd
-                    else doc.total
-                )
-            )
             filas.append(
                 [
                     doc.proveedor.nombre if doc.proveedor else "",
@@ -732,8 +858,8 @@ def reporte_cxp(request):
                     doc.numero,
                     doc.fecha_vencimiento,
                     item["dias"],
-                    monto_original,
-                    "",
+                    item["monto_original"],
+                    item["monto_pagado"],
                     item["saldo"],
                     item["s_0"],
                     item["s_31"],
@@ -741,7 +867,6 @@ def reporte_cxp(request):
                     item["s_90"],
                 ]
             )
-        # Agregar fila separadora y préstamos de socios
         filas.append(["--- PRESTAMOS DE SOCIOS ---", "", "", "", "", "", "", "", "", "", "", ""])
         for item in resultados_socios:
             filas.append(
@@ -780,6 +905,11 @@ def reporte_cxp(request):
         "resultados_socios": resultados_socios,
         "total_socios": total_socios,
         "total_general_cxp": total_general_cxp,
+        "agrupar_por_proveedor": agrupar_por_proveedor,
+        "grupos_proveedor": grupos_proveedor,
+        "mostrar_aging": mostrar_aging,
+        "sort_by": sort_by,
+        "sort_dir": sort_dir,
     }
     return render(request, "reportes/cxp.html", context)
 
@@ -790,9 +920,11 @@ def reporte_produccion(request):
     empresa = ConfiguracionEmpresa.objects.first()
     fecha_desde = request.GET.get("fecha_desde")
     fecha_hasta = request.GET.get("fecha_hasta")
+    producto_q = request.GET.get("producto_q", "").strip()
     producto_ids = request.GET.getlist("producto")
-    modo = request.GET.get("modo", "detallado")  # detallado | consolidado
-    mostrar = request.GET.get("mostrar", "ambos")  # ambos | solo_consumos | solo_productos
+    modo = request.GET.get("modo", "detallado")
+    incluir_consumos = request.GET.get("incluir_consumos", "1") == "1"
+    incluir_productos = request.GET.get("incluir_productos", "1") == "1"
 
     qs = OrdenProduccion.objects.all()
     if fecha_desde:
@@ -801,157 +933,106 @@ def reporte_produccion(request):
         qs = qs.filter(fecha_apertura__lte=fecha_hasta)
     if producto_ids:
         qs = qs.filter(salidas__producto_id__in=producto_ids).distinct()
+    elif producto_q:
+        qs = qs.filter(
+            Q(salidas__producto__nombre__icontains=producto_q)
+            | Q(salidas__producto__codigo__icontains=producto_q)
+        ).distinct()
 
-    parametros = {}
+    parametros = {
+        "Modo": modo,
+        "Mostrar consumos": "Si" if incluir_consumos else "No",
+        "Mostrar productos": "Si" if incluir_productos else "No",
+    }
     if fecha_desde:
         parametros["Desde"] = fecha_desde
     if fecha_hasta:
         parametros["Hasta"] = fecha_hasta
     if producto_ids:
         parametros["Producto"] = ", ".join(producto_ids)
-    parametros["Modo"] = modo
-    parametros["Mostrar"] = mostrar
+    elif producto_q:
+        parametros["Producto"] = producto_q
 
     context = {
         "empresa": empresa,
         "fecha_desde": fecha_desde,
         "fecha_hasta": fecha_hasta,
-        "producto_ids": producto_ids,
-        "productos": Producto.objects.filter(activo=True).order_by("codigo"),
+        "producto_q": producto_q,
         "modo": modo,
-        "mostrar": mostrar,
+        "incluir_consumos": incluir_consumos,
+        "incluir_productos": incluir_productos,
     }
 
-    if modo == "detallado":
-        ordenes = list(
-            qs.prefetch_related(
-                "salidas__producto__unidad_medida",
-                "consumos__producto",
-            ).order_by("-fecha_apertura")
-        )
-        for orden in ordenes:
-            orden.mp_total = sum(c.subtotal for c in orden.consumos.all())
-            for s in orden.salidas.all():
-                if s.producto.unidad_medida.simbolo.lower() == "kg":
-                    s.kg_totales = s.cantidad
-                else:
-                    if s.producto.peso_unitario_kg:
-                        s.kg_totales = s.cantidad * s.producto.peso_unitario_kg
-                    else:
-                        s.kg_totales = None
-                if s.cantidad > 0:
-                    s.cu = s.costo_asignado / s.cantidad
-                else:
-                    s.cu = Decimal("0.00")
+    ordenes = list(
+        qs.prefetch_related(
+            "salidas__producto__unidad_medida",
+            "consumos__producto__unidad_medida",
+        ).order_by("-fecha_apertura", "-id")
+    )
+    for orden in ordenes:
+        orden.consumos_reporte = list(orden.consumos.all())
+        orden.salidas_reporte = list(orden.salidas.all())
+        orden.mp_total = sum((c.subtotal for c in orden.consumos_reporte), Decimal("0.00"))
+        orden.total_productos = sum((s.costo_asignado or Decimal("0.00") for s in orden.salidas_reporte), Decimal("0.00"))
+        orden.yield_display = orden.rendimiento_real or Decimal("0.00")
+        for salida in orden.salidas_reporte:
+            if salida.cantidad > 0:
+                salida.cu = (salida.costo_asignado or Decimal("0.00")) / salida.cantidad
+            else:
+                salida.cu = Decimal("0.00")
+        for consumo in orden.consumos_reporte:
+            consumo.costo_unitario_display = consumo.costo_unitario or Decimal("0.00")
 
-        total_general_mp = sum((o.mp_total for o in ordenes), Decimal("0.00"))
-        total_general_costo = sum((o.costo_total for o in ordenes), Decimal("0.00"))
+    total_general_mp = sum((o.mp_total for o in ordenes), Decimal("0.00"))
+    total_general_productos = sum((o.total_productos for o in ordenes), Decimal("0.00"))
 
-        context.update({
-            "ordenes": ordenes,
-            "total_general_mp": total_general_mp,
-            "total_general_costo": total_general_costo,
-        })
+    context.update({
+        "ordenes": ordenes,
+        "total_general_mp": total_general_mp,
+        "total_general_productos": total_general_productos,
+    })
 
-    elif modo == "consolidado":
-        # Consolidar consumos
-        if mostrar in ["ambos", "solo_consumos"]:
+    if modo == "consolidado":
+        context["total_ordenes"] = len(ordenes)
+        if incluir_consumos:
             consumos_consolidados = list(
                 ConsumoOP.objects.filter(orden__in=qs)
-                .values("producto__nombre", "producto__unidad_medida__simbolo")
-                .annotate(
-                    total_cantidad=Sum("cantidad_consumida"),
-                    total_costo=Sum("subtotal"),
-                )
+                .values("producto__codigo", "producto__nombre", "producto__unidad_medida__simbolo")
+                .annotate(total_cantidad=Sum("cantidad_consumida"), total_costo=Sum("subtotal"))
                 .order_by("producto__nombre")
-            )
-            total_consumos_costo = sum(
-                c["total_costo"] or Decimal("0.00") for c in consumos_consolidados
             )
             context["consumos_consolidados"] = consumos_consolidados
-            context["total_consumos_costo"] = total_consumos_costo
-
-        # Consolidar productos terminados
-        if mostrar in ["ambos", "solo_productos"]:
+            context["total_consumos_costo"] = sum((c["total_costo"] or Decimal("0.00") for c in consumos_consolidados), Decimal("0.00"))
+        if incluir_productos:
             productos_consolidados = list(
                 SalidaOrden.objects.filter(orden__in=qs)
-                .values("producto__nombre", "producto__unidad_medida__simbolo")
-                .annotate(total_cantidad=Sum("cantidad"))
+                .values("producto__codigo", "producto__nombre", "producto__unidad_medida__simbolo")
+                .annotate(total_cantidad=Sum("cantidad"), total_costo=Sum("costo_asignado"))
                 .order_by("producto__nombre")
             )
-            total_kg_producidos = sum(
-                p["total_cantidad"] or Decimal("0.00") for p in productos_consolidados
-            )
             context["productos_consolidados"] = productos_consolidados
-            context["total_kg_producidos"] = total_kg_producidos
+            context["total_kg_producidos"] = sum((p["total_cantidad"] or Decimal("0.00") for p in productos_consolidados), Decimal("0.00"))
 
-        # Indicadores consolidados
-        context["total_ordenes"] = qs.count()
-
-    # Export Excel (always uses detallado logic)
     if "exportar" in request.GET:
-        ordenes_exp = list(
-            qs.prefetch_related(
-                "salidas__producto__unidad_medida", "consumos"
-            ).order_by("-fecha_apertura")
-        )
-        for orden in ordenes_exp:
-            orden.mp_total = sum(c.subtotal for c in orden.consumos.all())
-            for s in orden.salidas.all():
-                if s.producto.unidad_medida.simbolo.lower() == "kg":
-                    s.kg_totales = s.cantidad
-                else:
-                    s.kg_totales = (
-                        s.cantidad * s.producto.peso_unitario_kg
-                        if s.producto.peso_unitario_kg
-                        else None
-                    )
-                s.cu = (
-                    s.costo_asignado / s.cantidad
-                    if s.cantidad > 0
-                    else Decimal("0.00")
-                )
-
         columnas = [
             "No. Orden",
             "Fecha",
             "Estado",
-            "Rendimiento Real",
-            "Costo Total MP (USD)",
-            "Producto Obtenido",
-            "Cant. Fisica",
+            "Rendimiento",
+            "Tipo",
+            "Producto",
+            "Cantidad",
             "Unidad",
-            "Kg Totales",
-            "Costo Asignado",
-            "Costo Unitario USD",
+            "Costo USD",
         ]
         filas = []
-        for orden in ordenes_exp:
-            if orden.salidas.all():
-                for sal in orden.salidas.all():
-                    filas.append([
-                        orden.numero,
-                        orden.fecha_apertura,
-                        orden.estado,
-                        orden.rendimiento_real,
-                        orden.mp_total,
-                        f"{sal.producto.nombre}{' (Subprod)' if sal.es_subproducto else ''}",
-                        sal.cantidad,
-                        sal.producto.unidad_medida.simbolo,
-                        sal.kg_totales if sal.kg_totales is not None else "-",
-                        sal.costo_asignado or Decimal("0.00"),
-                        sal.cu or Decimal("0.00"),
-                    ])
-            else:
-                filas.append([
-                    orden.numero,
-                    orden.fecha_apertura,
-                    orden.estado,
-                    orden.rendimiento_real,
-                    orden.mp_total,
-                    "Sin salidas",
-                    "", "", "", "", "",
-                ])
+        for orden in ordenes:
+            if incluir_consumos:
+                for consumo in orden.consumos_reporte:
+                    filas.append([orden.numero, orden.fecha_apertura, orden.estado, orden.yield_display, "Consumo", consumo.producto.nombre, consumo.cantidad_consumida, consumo.producto.unidad_medida.simbolo if consumo.producto.unidad_medida else "", consumo.subtotal])
+            if incluir_productos:
+                for salida in orden.salidas_reporte:
+                    filas.append([orden.numero, orden.fecha_apertura, orden.estado, orden.yield_display, "Producto", salida.producto.nombre, salida.cantidad, salida.producto.unidad_medida.simbolo if salida.producto.unidad_medida else "", salida.costo_asignado or Decimal("0.00")])
         return exportar_excel(
             "reporte_produccion",
             columnas,
@@ -983,7 +1064,9 @@ def reporte_gastos(request):
         qs = qs.filter(estado=estado)
 
     gastos = list(qs.select_related("categoria_gasto", "categoria_gasto__padre").order_by("fecha_emision"))
-    total_usd = sum((Decimal(str(g.monto_usd)) for g in gastos), Decimal("0.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    for gasto in gastos:
+        gasto.monto_usd_calculado = _monto_usd_gasto(gasto)
+    total_usd = sum((g.monto_usd_calculado for g in gastos), Decimal("0.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     try:
         nivel_detalle = int(request.GET.get("nivel_detalle", 2))
@@ -997,7 +1080,7 @@ def reporte_gastos(request):
     grupos_nivel2 = {}   # {padre: {subcat: [gastos]}}
     sin_categoria = []
     for g in gastos:
-        monto = Decimal(str(g.monto_usd))
+        monto = g.monto_usd_calculado
         cat = g.categoria_gasto
         if cat:
             padre = cat.padre if cat.padre else cat
@@ -1024,11 +1107,11 @@ def reporte_gastos(request):
                 {
                     "subcat": subcat,
                     "gastos": items,
-                    "subtotal": sum(Decimal(str(g.monto_usd)) for g in items).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+                    "subtotal": sum((g.monto_usd_calculado for g in items), Decimal("0.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
                 }
                 for subcat, items in sorted(subcats.items(), key=lambda x: x[0].nombre)
             ],
-            "subtotal": sum(Decimal(str(g.monto_usd)) for subcats_items in grupos_nivel2.get(padre, {}).values() for g in subcats_items).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+            "subtotal": sum((g.monto_usd_calculado for subcats_items in grupos_nivel2.get(padre, {}).values() for g in subcats_items), Decimal("0.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
         }
         for padre, subcats in sorted(grupos_nivel2.items(), key=lambda x: x[0].nombre)
     ]
@@ -1071,7 +1154,7 @@ def reporte_gastos(request):
                         g.descripcion,
                         g.monto,
                         g.moneda,
-                        g.monto_usd,
+                        g.monto_usd_calculado,
                         g.estado,
                     ]
                 )
@@ -1172,20 +1255,11 @@ def reporte_capital_trabajo(request):
 
     # Pasivo Corriente: CxP Compras (APROBADAS con saldo pendiente)
     cxp_compras = Decimal("0.00")
-    facturas_aprobadas = (
-        FacturaCompra.objects.filter(estado="APROBADA", fecha__lte=hasta)
-        .annotate(
-            total_pagado=Coalesce(
-                Sum("pagos__monto_usd"),
-                Value(Decimal("0.00")),
-                output_field=DecimalField(),
-            )
-        )
-        .annotate(saldo=F("total") - F("total_pagado"))
-        .filter(saldo__gt=0)
-    )
+    facturas_aprobadas = FacturaCompra.objects.filter(
+        estado="APROBADA", fecha__lte=hasta
+    ).prefetch_related("pagos", "detalle_pagos__pago")
     for f in facturas_aprobadas:
-        cxp_compras += Decimal(str(f.saldo))
+        cxp_compras += _resumen_factura_compra(f, hasta=hasta)["saldo"]
     cxp_compras = q(cxp_compras)
 
     # Pasivo Corriente: CxP Gastos
@@ -1196,7 +1270,7 @@ def reporte_capital_trabajo(request):
         ).select_related("categoria_gasto", "categoria_gasto__padre")
     )
     for g in gastos_base:
-        cxp_gastos += Decimal(str(g.monto_usd))
+        cxp_gastos += _monto_usd_gasto(g)
     cxp_gastos = q(cxp_gastos)
 
     # Pasivo de socios: préstamos activos
@@ -1250,7 +1324,8 @@ def reporte_capital_trabajo(request):
     _grupos_n1 = {}
     _grupos_n2 = {}
     for g in gastos_base:
-        monto = Decimal(str(g.monto_usd))
+        g.monto_usd_calculado = _monto_usd_gasto(g)
+        monto = g.monto_usd_calculado
         cat = g.categoria_gasto
         if cat:
             padre = cat.padre if cat.padre else cat
@@ -1272,11 +1347,11 @@ def reporte_capital_trabajo(request):
                 {
                     "subcat": subcat,
                     "gastos": items,
-                    "subtotal": sum(Decimal(str(g.monto_usd)) for g in items).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+                    "subtotal": sum((g.monto_usd_calculado for g in items), Decimal("0.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
                 }
                 for subcat, items in sorted(subcats.items(), key=lambda x: x[0].nombre)
             ],
-            "subtotal": sum(Decimal(str(g.monto_usd)) for subcats_items in _grupos_n2.get(padre, {}).values() for g in subcats_items).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+            "subtotal": sum((g.monto_usd_calculado for subcats_items in _grupos_n2.get(padre, {}).values() for g in subcats_items), Decimal("0.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
         }
         for padre, subcats in sorted(_grupos_n2.items(), key=lambda x: x[0].nombre)
     ]
@@ -1333,6 +1408,16 @@ def reporte_capital_trabajo(request):
         "gastos_display_n1": gastos_display_n1_ct,
         "gastos_display_n2": gastos_display_n2_ct,
         "nivel_detalle": nivel_detalle,
+        "sources_info": {
+            "efectivo": "CuentaBancaria.saldo_actual reexpresado a USD en views.reporte_capital_trabajo()",
+            "cxc": "FacturaVenta + cobros + notas_credito via _resumen_factura_venta() con fecha de corte",
+            "inventario": "Producto.stock_actual * costo_promedio/precio_venta en views.reporte_capital_trabajo()",
+            "cxp_compras": "FacturaCompra + pagos + detalle_pagos via _resumen_factura_compra() con fecha de corte",
+            "cxp_gastos": "GastoServicio pendiente usando monto_usd o recalculo monto/tasa cuando monto_usd historico es 0",
+            "prestamos_corriente": "PrestamoPorSocio activo con annotate(Sum pagos__monto_usd)",
+            "prestamos_no_corriente": "PrestamoPorSocio activo con annotate(Sum pagos__monto_usd)",
+            "capital_neto": "Activo corriente - pasivo corriente calculado en views.reporte_capital_trabajo()",
+        },
     }
     return render(request, "reportes/capital_trabajo.html", context)
 
@@ -1771,91 +1856,123 @@ def tesoreria_view(request):
     cuentas_ids = request.GET.getlist("cuenta")
     tipos_sel = request.GET.getlist("tipo_movimiento")
 
-    # --- MovimientoCaja ---
+    def _parse_fecha(valor):
+        if not valor:
+            return None
+        try:
+            return datetime.datetime.strptime(valor, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    def _signo(tipo):
+        if tipo in ("ENTRADA", "TRANSFERENCIA_ENTRADA", "ABONO"):
+            return Decimal("1")
+        return Decimal("-1")
+
+    fecha_desde_date = _parse_fecha(fecha_desde)
+    fecha_hasta_date = _parse_fecha(fecha_hasta)
+
     mc_qs = MovimientoCaja.objects.select_related("cuenta").all()
-    if fecha_desde:
-        mc_qs = mc_qs.filter(fecha__gte=fecha_desde)
-    if fecha_hasta:
-        mc_qs = mc_qs.filter(fecha__lte=fecha_hasta)
+    mt_qs = MovimientoTesoreria.objects.select_related("cuenta", "categoria").all()
     if cuentas_ids:
         mc_qs = mc_qs.filter(cuenta_id__in=cuentas_ids)
-
-    # --- MovimientoTesoreria ---
-    mt_qs = MovimientoTesoreria.objects.select_related("cuenta", "categoria").all()
-    if fecha_desde:
-        mt_qs = mt_qs.filter(fecha__gte=fecha_desde)
-    if fecha_hasta:
-        mt_qs = mt_qs.filter(fecha__lte=fecha_hasta)
-    if cuentas_ids:
         mt_qs = mt_qs.filter(cuenta_id__in=cuentas_ids)
 
-    # Consolidar en lista uniforme
-    movimientos = []
+    movimientos_todos = []
     for m in mc_qs:
-        movimientos.append({
+        monto_ves = _quantize_money(m.monto if m.moneda == "VES" else _decimal(m.monto_usd) * _decimal(m.tasa_cambio or 1))
+        movimientos_todos.append({
             "fecha": m.fecha,
             "cuenta": m.cuenta,
             "origen": "Caja",
             "tipo": m.tipo,
             "referencia": m.referencia,
             "descripcion": m.notas or "",
-            "monto": Decimal(str(m.monto)),
+            "monto": _quantize_money(m.monto),
+            "monto_ves": monto_ves,
             "moneda": m.moneda,
-            "tasa": Decimal(str(m.tasa_cambio)),
-            "monto_usd": Decimal(str(m.monto_usd)),
+            "tasa": _decimal(m.tasa_cambio),
+            "monto_usd": _quantize_money(m.monto_usd),
         })
     for m in mt_qs:
-        movimientos.append({
+        monto_ves = _quantize_money(m.monto if m.moneda == "VES" else _decimal(m.monto_usd) * _decimal(m.tasa_cambio or 1))
+        movimientos_todos.append({
             "fecha": m.fecha,
             "cuenta": m.cuenta,
-            "origen": "Tesorería",
+            "origen": "Tesorer?a",
             "tipo": m.tipo,
             "referencia": m.numero,
             "descripcion": m.descripcion,
-            "monto": Decimal(str(m.monto)),
+            "monto": _quantize_money(m.monto),
+            "monto_ves": monto_ves,
             "moneda": m.moneda,
-            "tasa": Decimal(str(m.tasa_cambio)),
-            "monto_usd": Decimal(str(m.monto_usd)),
+            "tasa": _decimal(m.tasa_cambio),
+            "monto_usd": _quantize_money(m.monto_usd),
         })
 
-    # Filtrar por tipo_movimiento si aplica
     if tipos_sel:
-        movimientos = [m for m in movimientos if m["tipo"] in tipos_sel]
+        movimientos_todos = [m for m in movimientos_todos if m["tipo"] in tipos_sel]
 
-    # Ordenar por fecha, luego cuenta
-    movimientos.sort(key=lambda m: (m["fecha"], m["cuenta"].nombre))
+    movimientos_todos.sort(key=lambda m: (m["fecha"], m["cuenta"].nombre, m["referencia"]))
 
-    # Resumen por cuenta
+    saldo_inicial = {}
+    saldo_inicial_usd = {}
+    movimientos = []
+    running_native = {}
+    running_usd = {}
+    for mov in movimientos_todos:
+        cid = mov["cuenta"].pk
+        running_native.setdefault(cid, Decimal("0.00"))
+        running_usd.setdefault(cid, Decimal("0.00"))
+        signo = _signo(mov["tipo"])
+        monto_nativo = mov["monto"] if mov["cuenta"].moneda == mov["moneda"] else mov["monto_usd"]
+        running_native[cid] += signo * _decimal(monto_nativo)
+        running_usd[cid] += signo * _decimal(mov["monto_usd"])
+
+        if fecha_desde_date and mov["fecha"] < fecha_desde_date:
+            saldo_inicial[cid] = running_native[cid]
+            saldo_inicial_usd[cid] = running_usd[cid]
+            continue
+        if fecha_hasta_date and mov["fecha"] > fecha_hasta_date:
+            continue
+        mov["saldo_cuenta"] = _quantize_money(running_native[cid])
+        mov["saldo_usd"] = _quantize_money(running_usd[cid])
+        mov["saldo_ves"] = _quantize_money(running_native[cid] if mov["cuenta"].moneda == "VES" else running_usd[cid] * (mov["tasa"] or Decimal("1.00")))
+        movimientos.append(mov)
+
     resumen = {}
+    for cuenta in cuentas_qs:
+        cid = cuenta.pk
+        resumen[cid] = {
+            "cuenta": cuenta,
+            "saldo_inicial": _quantize_money(saldo_inicial.get(cid, Decimal("0.00"))),
+            "saldo_inicial_usd": _quantize_money(saldo_inicial_usd.get(cid, Decimal("0.00"))),
+            "entradas_usd": Decimal("0.00"),
+            "salidas_usd": Decimal("0.00"),
+        }
     for m in movimientos:
         cid = m["cuenta"].pk
-        if cid not in resumen:
-            resumen[cid] = {
-                "cuenta": m["cuenta"],
-                "entradas_usd": Decimal("0"),
-                "salidas_usd": Decimal("0"),
-            }
-        tipo = m["tipo"]
         monto_usd = m["monto_usd"]
-        # Tipos que suman saldo
-        if tipo in ("ENTRADA", "TRANSFERENCIA_ENTRADA", "ABONO"):
+        if _signo(m["tipo"]) > 0:
             resumen[cid]["entradas_usd"] += monto_usd
-        elif tipo in ("SALIDA", "TRANSFERENCIA_SALIDA", "CARGO", "REEXPRESION"):
+        else:
             resumen[cid]["salidas_usd"] += monto_usd
 
     resumen_list = []
-    total_entradas = Decimal("0")
-    total_salidas = Decimal("0")
+    total_entradas = Decimal("0.00")
+    total_salidas = Decimal("0.00")
+    total_saldo_inicial = Decimal("0.00")
+    total_saldo_inicial_usd = Decimal("0.00")
     for v in resumen.values():
-        neto = v["entradas_usd"] - v["salidas_usd"]
-        v["neto"] = neto
+        v["neto"] = v["entradas_usd"] - v["salidas_usd"]
         total_entradas += v["entradas_usd"]
         total_salidas += v["salidas_usd"]
+        total_saldo_inicial += v["saldo_inicial"]
+        total_saldo_inicial_usd += v["saldo_inicial_usd"]
         resumen_list.append(v)
     resumen_list.sort(key=lambda r: r["cuenta"].nombre)
     total_neto = total_entradas - total_salidas
 
-    # Tipos disponibles para filtro
     TIPOS_MC = [t[0] for t in MovimientoCaja.TIPO_CHOICES]
     TIPOS_MT = [t[0] for t in MovimientoTesoreria.TIPOS]
     todos_tipos = sorted(set(TIPOS_MC + TIPOS_MT))
@@ -1873,7 +1990,9 @@ def tesoreria_view(request):
         "total_entradas": total_entradas,
         "total_salidas": total_salidas,
         "total_neto": total_neto,
-        "titulo": "Reporte de Tesorería",
+        "total_saldo_inicial": total_saldo_inicial,
+        "total_saldo_inicial_usd": total_saldo_inicial_usd,
+        "titulo": "Reporte de Tesorer?a",
     }
     return render(request, "reportes/tesoreria.html", context)
 

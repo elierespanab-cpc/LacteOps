@@ -1,143 +1,69 @@
-{% load humanize %}
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Reporte de Stock — {{ empresa.nombre|default:"LacteOps" }}</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 13px; color: #222; background: #fff; }
-    .report-header { display: flex; justify-content: space-between; align-items: flex-start;
-                     border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 14px; }
-    .report-header .empresa-info h2 { font-size: 17px; }
-    .report-header .empresa-info p  { font-size: 11px; color: #555; }
-    .report-header .titulo-bloque   { text-align: right; }
-    .report-header .titulo-bloque h1 { font-size: 16px; text-transform: uppercase; }
-    .report-header .titulo-bloque p  { font-size: 11px; color: #555; }
-    .filtros-form { background: #f5f5f5; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; }
-    .filtros-form h3 { font-size: 13px; margin-bottom: 8px; }
-    .filtros-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
-    .filtros-row label { font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px; }
-    .filtros-row select, .filtros-row input { border: 1px solid #ccc; border-radius: 3px;
-                                               padding: 4px 6px; font-size: 12px; }
-    .filtros-row button { background: #2c6fad; color: #fff; border: none; padding: 5px 14px;
-                          border-radius: 3px; cursor: pointer; font-size: 12px; }
-    .filtros-row button:hover { background: #1f5080; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
-    thead tr th { background: #2c6fad; color: #fff; padding: 6px 8px; font-size: 12px; text-align: left; }
-    tbody tr td { padding: 5px 8px; border-bottom: 1px solid #e0e0e0; font-size: 12px; }
-    tbody tr:nth-child(even) td { background: #f9f9f9; }
-    .cat-header td { background: #2c6fad; color: #fff; font-weight: bold; font-size: 12px;
-                     padding: 6px 8px; }
-    .cat-subtotal td { background: #d4e6f9; font-weight: bold; font-size: 12px; padding: 5px 8px; }
-    tfoot tr td { background: #e8f0fb; font-weight: bold; font-size: 12px; padding: 6px 8px;
-                  border-top: 2px solid #2c6fad; }
-    .text-right { text-align: right; }
-    .empty-msg { text-align: center; color: #888; padding: 20px; font-style: italic; }
-    @media print {
-      .filtros-form, .no-print { display: none !important; }
-      body { font-size: 11px; }
-      thead tr th, .cat-header td { background: #333 !important;
-        -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .cat-subtotal td, tfoot tr td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    }
-  </style>
-</head>
-<body>
+﻿{% extends 'reportes/base_reporte.html' %}
+{% load custom_filters %}
 
-<div class="report-header">
-  <div class="empresa-info">
-    <h2>{{ empresa.nombre|default:"LacteOps" }}</h2>
-    {% if empresa.rif %}<p>RIF: {{ empresa.rif }}</p>{% endif %}
-    {% if empresa.telefono %}<p>Telf.: {{ empresa.telefono }}</p>{% endif %}
-  </div>
-  <div class="titulo-bloque">
-    <h1>Reporte de Stock</h1>
-    <p>Fecha de corte: {{ fecha_corte }}</p>
-    <p>Generado: {% now "d/m/Y H:i" %}</p>
-  </div>
+{% block report_title %}
+Reporte de Stock
+<br><small>
+    {% if solo_activos %}Solo productos activos{% else %}Todos los productos{% endif %}
+    {% if request.GET.fecha %} | Fecha: {{ request.GET.fecha }}{% endif %}
+    {% if request.GET.con_stock %} | Solo con stock{% endif %}
+</small>
+{% endblock %}
+
+{% block report_content %}
+<div class="no-print filters">
+    <form method="get">
+        <label>Fecha de corte: <input type="date" name="fecha" value="{{ request.GET.fecha|default:today }}"></label>
+        <label><input type="checkbox" name="con_stock" value="1" {% if request.GET.con_stock == '1' %}checked{% endif %}> Solo productos con stock</label>
+        <label><input type="checkbox" name="activos" value="1" {% if solo_activos %}checked{% endif %}> Solo productos activos</label>
+        <button type="submit">Actualizar</button>
+    </form>
 </div>
 
-<form method="get" class="filtros-form no-print">
-  <h3>Filtros</h3>
-  <div class="filtros-row">
-    <div>
-      <label>Fecha de corte</label>
-      <input type="date" name="fecha" value="{{ fecha_corte }}">
-    </div>
-    <div>
-      <label>Productos</label>
-      <select name="activos">
-        <option value="1" {% if solo_activos %}selected{% endif %}>Solo activos</option>
-        <option value="0" {% if not solo_activos %}selected{% endif %}>Todos</option>
-      </select>
-    </div>
-    <div>
-      <label>Filtro stock</label>
-      <select name="con_stock">
-        <option value="0" {% if not solo_con_stock %}selected{% endif %}>Todos</option>
-        <option value="1" {% if solo_con_stock %}selected{% endif %}>Solo con stock</option>
-      </select>
-    </div>
-    <div>
-      <button type="submit">Consultar</button>
-      <button type="submit" name="exportar" value="1" style="background:#1e8c1e;margin-left:6px;">Excel</button>
-      <button type="button" onclick="window.print()" style="background:#555;margin-left:6px;">Imprimir</button>
-    </div>
-  </div>
-</form>
-
-{% if categorias_data %}
 <table>
-  <thead>
-    <tr>
-      <th>Código</th>
-      <th>Producto</th>
-      <th>U/M</th>
-      <th class="text-right">Stock</th>
-      <th class="text-right">Costo Prom.</th>
-      <th class="text-right">Precio Vta.</th>
-      <th class="text-right">Valor Costo</th>
-      <th class="text-right">Valor Venta</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for grupo in categorias_data %}
-    <tr class="cat-header">
-      <td colspan="8">{{ grupo.categoria }}</td>
-    </tr>
-    {% for p in grupo.productos %}
-    <tr>
-      <td>{{ p.codigo }}</td>
-      <td>{{ p.nombre }}</td>
-      <td>{{ p.unidad }}</td>
-      <td class="text-right">{{ p.stock_actual|floatformat:4 }}</td>
-      <td class="text-right">{{ p.costo_promedio|floatformat:6 }}</td>
-      <td class="text-right">{% if p.precio_venta %}{{ p.precio_venta|floatformat:2 }}{% else %}—{% endif %}</td>
-      <td class="text-right">{{ p.valor_costo|floatformat:2 }}</td>
-      <td class="text-right">{{ p.valor_venta|floatformat:2 }}</td>
-    </tr>
-    {% empty %}
-    <tr><td colspan="8" class="empty-msg">Sin productos.</td></tr>
-    {% endfor %}
-    <tr class="cat-subtotal">
-      <td colspan="6">Subtotal — {{ grupo.categoria }}</td>
-      <td class="text-right">{{ grupo.subtotal_costo|floatformat:2 }}</td>
-      <td class="text-right">{{ grupo.subtotal_venta|floatformat:2 }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-  <tfoot>
-    <tr>
-      <td colspan="6">Total General ({{ productos|length }} productos)</td>
-      <td class="text-right">{{ total_costo|floatformat:2 }}</td>
-      <td class="text-right">{{ total_venta|floatformat:2 }}</td>
-    </tr>
-  </tfoot>
+    <thead>
+        <tr>
+            <th>Código</th>
+            <th>Producto</th>
+            <th>U/M</th>
+            <th class="text-right">Stock</th>
+            <th class="text-right">Costo Unit.</th>
+            <th class="text-right">Precio Unit.</th>
+            <th class="text-right">Valor al Costo</th>
+            <th class="text-right">Valor de Venta</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for grupo in categorias_data %}
+        <tr class="group-header"><td colspan="8">{{ grupo.categoria }}</td></tr>
+            {% for p in grupo.productos %}
+            <tr>
+                <td>{{ p.codigo }}</td>
+                <td>{{ p.nombre }}</td>
+                <td>{{ p.unidad }}</td>
+                <td class="text-right">{{ p.stock_actual|formato_cantidad }}</td>
+                <td class="text-right">{{ p.costo_promedio|formato_costo }}</td>
+                <td class="text-right">{{ p.precio_venta|default_if_none:''|formato_costo }}</td>
+                <td class="text-right">{{ p.valor_costo|formato_moneda:'USD' }}</td>
+                <td class="text-right">{{ p.valor_venta|formato_moneda:'USD' }}</td>
+            </tr>
+            {% endfor %}
+        <tr class="group-subtotal">
+            <td colspan="6" class="text-right">Subtotal {{ grupo.categoria }}</td>
+            <td class="text-right">{{ grupo.subtotal_costo|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ grupo.subtotal_venta|formato_moneda:'USD' }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-center">No se encontraron productos.</td></tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr class="total-row">
+            <td colspan="6" class="text-right">Totales</td>
+            <td class="text-right">{{ total_costo|formato_moneda:'USD' }}</td>
+            <td class="text-right">{{ total_venta|formato_moneda:'USD' }}</td>
+        </tr>
+    </tfoot>
 </table>
-{% else %}
-  <p class="empty-msg">No hay productos para los filtros seleccionados.</p>
-{% endif %}
+{% endblock %}
 
-</body>
-</html>

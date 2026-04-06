@@ -1,4 +1,4 @@
-{% extends 'reportes/base_reporte.html' %}
+﻿{% extends 'reportes/base_reporte.html' %}
 {% load humanize custom_filters %}
 
 {% block report_title %}
@@ -14,7 +14,7 @@
     <form method="get">
         <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
         <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}"></label>
-        <label>Categorías:
+        <label>CategorÃ­as:
             <select name="categoria" multiple>
                 {% for c in todas_categorias %}
                 <option value="{{ c }}">{{ c }}</option>
@@ -42,7 +42,7 @@
 <table>
     <thead>
         <tr>
-            <th>Categoría</th>
+            <th>CategorÃ­a</th>
             <th class="text-right">Total USD</th>
         </tr>
     </thead>
@@ -67,10 +67,10 @@
 <table>
     <thead>
         <tr>
-            <th>Número</th>
+            <th>NÃºmero</th>
             <th>Proveedor</th>
-            <th>Categoría</th>
-            <th>Descripción</th>
+            <th>CategorÃ­a</th>
+            <th>DescripciÃ³n</th>
             <th class="text-right">Monto Original</th>
             <th>Moneda</th>
             <th class="text-right">Equiv. USD</th>
@@ -96,7 +96,7 @@
                     <td>{{ g.descripcion }}</td>
                     <td class="text-right">{{ g.monto|formato_moneda:g.moneda }}</td>
                     <td>{{ g.moneda }}</td>
-                    <td class="text-right">{{ g.monto_usd|formato_moneda:"USD" }}</td>
+                    <td class="text-right">{{ g.monto_usd_calculado|default:g.monto_usd|formato_moneda:"USD" }}</td>
                     <td class="text-center">{{ g.estado }}</td>
                 </tr>
                 {% endfor %}
@@ -125,3 +125,4 @@
 </table>
 {% endif %}
 {% endblock %}
+
