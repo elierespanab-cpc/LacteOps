@@ -140,6 +140,15 @@ if %ERRORLEVEL% GTR 1 (
 )
 
 echo       [OK] Datos importados correctamente
+
+:: Garantizar permisos completos al usuario de produccion sobre todos los objetos
+echo       Ajustando permisos al usuario %DB_USER%...
+"!PG_BIN!\psql" -U %DB_USER% -h %DB_HOST% -p %DB_PORT% -d %DB_NAME% -c ^
+    "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO %DB_USER%;" >nul 2>&1
+"!PG_BIN!\psql" -U %DB_USER% -h %DB_HOST% -p %DB_PORT% -d %DB_NAME% -c ^
+    "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO %DB_USER%;" >nul 2>&1
+"!PG_BIN!\psql" -U %DB_USER% -h %DB_HOST% -p %DB_PORT% -d %DB_NAME% -c ^
+    "GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO %DB_USER%;" >nul 2>&1
 echo.
 
 :: ── [4/5] Actualizar codigo ────────────────────────────────────
