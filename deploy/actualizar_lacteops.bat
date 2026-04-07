@@ -91,7 +91,9 @@ echo.
 
 :: ── [4/5] Actualizar codigo y migraciones ────────────────────
 echo [4/5] Actualizando codigo...
-git pull origin main
+git fetch origin
+git checkout sprint7
+git pull origin sprint7
 if %ERRORLEVEL% NEQ 0 (
     color 0C
     echo ERROR: No se pudo obtener la actualizacion desde GitHub.
