@@ -240,41 +240,53 @@ class OrdenProduccion(AuditableModel):
                 )
                 costo_total += consumo.subtotal
 
-            # Producción conjunta: distribución de costo por valor de mercado
+            # ── Prorrateo de costos conjuntos por valor de mercado ────────────
+            # Regla: subproductos (es_subproducto=True) ingresan a inventario a
+            # costo cero. El 100 % del pool (costo_total) se distribuye entre los
+            # productos principales usando su valor de mercado como ponderador.
+            # Los subproductos se excluyen del denominador desde el inicio, por lo
+            # que su "cuota teórica" no existe y no hay fuga de costos.
+            # El residuo de redondeo se imputa al producto de mayor valor de mercado
+            # para garantizar: Σ(costo_asignado_principales) == costo_total exacto.
+            SEIS = Decimal('0.000001')
+
             salidas_principales = [s for s in salidas if not s.es_subproducto]
             salidas_subproductos = [s for s in salidas if s.es_subproducto]
 
+            # Paso 1 — denominador: valor de mercado exclusivo de principales
             valor_total = sum(
-                Decimal(str(s.precio_referencia)) * Decimal(str(s.cantidad))
-                for s in salidas_principales
+                (Decimal(str(s.precio_referencia)) * Decimal(str(s.cantidad)) for s in salidas_principales),
+                Decimal('0'),
             )
-            costo_asignado_sum = Decimal('0.00')
 
-            principales_con_valor = []
-            for i, s in enumerate(salidas_principales):
+            # Paso 2 — calcular cuota prorrata para cada principal (sin residuo aún)
+            n_principales = len(salidas_principales)
+            asignaciones = []  # list of (salida, costo_asignado)
+            costo_asignado_sum = Decimal('0.000000')
+
+            for s in salidas_principales:
                 val_i = Decimal(str(s.precio_referencia)) * Decimal(str(s.cantidad))
-                principales_con_valor.append((val_i, i, s))
-
-            principales_con_valor.sort(key=lambda x: x[0])
-
-            for i, (val_i, idx, s) in enumerate(principales_con_valor):
-                if i == len(principales_con_valor) - 1:
-                    costo_asignado = costo_total - costo_asignado_sum
+                if valor_total > Decimal('0'):
+                    costo_i = (costo_total * val_i / valor_total).quantize(SEIS)
                 else:
-                    if valor_total > Decimal('0'):
-                        costo_asignado = costo_total * (val_i / valor_total)
-                    else:
-                        # Si nadie tiene precio_referencia o es 0, distribuimos equitativamente
-                        costo_asignado = costo_total / Decimal(str(len(principales_con_valor)))
+                    # Sin precios de referencia: distribución equitativa
+                    costo_i = (costo_total / Decimal(str(n_principales))).quantize(SEIS)
+                costo_asignado_sum += costo_i
+                asignaciones.append([s, costo_i])
 
-                costo_asignado_sum += costo_asignado
+            # Paso 3 — ajuste de redondeo: imputer residuo al de mayor valor de mercado
+            residuo = costo_total - costo_asignado_sum  # siempre < 1 centavo
+            if residuo != Decimal('0') and asignaciones:
+                mayor = max(asignaciones, key=lambda x: Decimal(str(x[0].precio_referencia)) * Decimal(str(x[0].cantidad)))
+                mayor[1] += residuo
+
+            # Paso 4 — persistir y registrar entrada de inventario para principales
+            for s, costo_asignado in asignaciones:
                 s.costo_asignado = costo_asignado
                 s.save(update_fields=['costo_asignado'], skip_recalcular=True)
 
-                if Decimal(str(s.cantidad)) > Decimal('0'):
-                    costo_unitario_i = costo_asignado / Decimal(str(s.cantidad))
-                else:
-                    costo_unitario_i = Decimal('0.000000')
+                cantidad = Decimal(str(s.cantidad))
+                costo_unitario_i = (costo_asignado / cantidad).quantize(SEIS) if cantidad > Decimal('0') else Decimal('0.000000')
 
                 registrar_entrada(
                     producto=s.producto,
@@ -284,6 +296,7 @@ class OrdenProduccion(AuditableModel):
                     notas=f'Producción Principal OP {self.numero}',
                 )
 
+            # Paso 5 — subproductos: costo explícito cero (no participan en el pool)
             for s in salidas_subproductos:
                 s.costo_asignado = Decimal('0.000000')
                 s.save(update_fields=['costo_asignado'], skip_recalcular=True)
@@ -400,12 +413,22 @@ class OrdenProduccion(AuditableModel):
         with transaction.atomic():
             from apps.almacen.models import MovimientoInventario
 
-            # Revertir movimientos de inventario de esta orden
+            # Revertir solo los movimientos de cierre que aún no tienen reversión.
+            # Si la OP fue cerrada N veces, habrá N*23 movimientos pero puede haber
+            # ya K*23 REV de reaperturas parciales previas; solo compensamos los (N-K)*23
+            # restantes para no generar SALIDAs por encima del stock disponible.
             movimientos = list(
                 MovimientoInventario.objects.filter(referencia=self.numero)
                 .select_related('producto')
+                .order_by('id')
             )
-            for mov in movimientos:
+            ya_revertidos = MovimientoInventario.objects.filter(
+                referencia=f'REV-{self.numero}'
+            ).count()
+            # Los movimientos ya compensados son los primeros `ya_revertidos` (orden FIFO)
+            pendientes = movimientos[ya_revertidos:]
+
+            for mov in pendientes:
                 if mov.tipo == 'SALIDA':
                     # Reversar SALIDA → ENTRADA compensatoria
                     registrar_entrada(

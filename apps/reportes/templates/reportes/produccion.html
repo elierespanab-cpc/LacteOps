@@ -27,6 +27,14 @@ Reporte de Producción
                 <option value="consolidado" {% if modo == 'consolidado' %}selected{% endif %}>Resumen consolidado</option>
             </select>
         </label>
+        <label>Estado OP
+            <select name="estado_op">
+                <option value="" {% if not estado_op %}selected{% endif %}>Todas</option>
+                <option value="CERRADA" {% if estado_op == 'CERRADA' %}selected{% endif %}>Cerradas</option>
+                <option value="ABIERTA" {% if estado_op == 'ABIERTA' %}selected{% endif %}>Abiertas</option>
+                <option value="ANULADA" {% if estado_op == 'ANULADA' %}selected{% endif %}>Anuladas</option>
+            </select>
+        </label>
         <label><input type="checkbox" name="incluir_consumos" value="1" {% if incluir_consumos %}checked{% endif %}> Incluir consumos</label>
         <label><input type="checkbox" name="incluir_productos" value="1" {% if incluir_productos %}checked{% endif %}> Incluir productos</label>
         <div><button type="submit">Actualizar</button></div>
@@ -75,7 +83,8 @@ Reporte de Producción
             </tr>
         </thead>
         <tbody>
-            {% for item in productos_consolidados %}
+            <tr style="background:#e8f4e8;"><td colspan="5"><strong>Productos Principales</strong></td></tr>
+            {% for item in productos_consolidados %}{% if not item.es_subproducto %}
             <tr>
                 <td>{{ item.producto__codigo }}</td>
                 <td>{{ item.producto__nombre }}</td>
@@ -83,9 +92,33 @@ Reporte de Producción
                 <td class="text-right">{{ item.total_cantidad|formato_cantidad }}</td>
                 <td class="text-right">{{ item.total_costo|formato_moneda:'USD' }}</td>
             </tr>
-            {% endfor %}
+            {% endif %}{% endfor %}
+            <tr class="total-row">
+                <td colspan="4" class="text-right">Subtotal Principales</td>
+                <td class="text-right">{{ total_productos_costo|formato_moneda:'USD' }}</td>
+            </tr>
+            <tr style="background:#fff3e0;"><td colspan="5"><strong>Subproductos</strong> <small style="color:#888;">(costo absorbido por principales)</small></td></tr>
+            {% for item in productos_consolidados %}{% if item.es_subproducto %}
+            <tr style="color:#666;">
+                <td>{{ item.producto__codigo }}</td>
+                <td>{{ item.producto__nombre }}</td>
+                <td>{{ item.producto__unidad_medida__simbolo }}</td>
+                <td class="text-right">{{ item.total_cantidad|formato_cantidad }}</td>
+                <td class="text-right">—</td>
+            </tr>
+            {% endif %}{% endfor %}
         </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="4" class="text-right">Total Costo Producción</td>
+                <td class="text-right">{{ total_productos_costo|formato_moneda:'USD' }}</td>
+            </tr>
+        </tfoot>
     </table>
+    <p style="font-size:11px;color:#777;margin-top:4px;">
+        * Los subproductos reciben costo 0 — su costo de producción queda absorbido en los productos principales por el método de distribución por valor de mercado.
+        La diferencia entre Total Consumos y Total Costo Producción refleja el costo absorbido por los subproductos.
+    </p>
     {% endif %}
 {% else %}
     <table>

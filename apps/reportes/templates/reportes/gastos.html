@@ -1,4 +1,4 @@
-﻿{% extends 'reportes/base_reporte.html' %}
+{% extends 'reportes/base_reporte.html' %}
 {% load humanize custom_filters %}
 
 {% block report_title %}
@@ -14,10 +14,10 @@
     <form method="get">
         <label>Desde: <input type="date" name="fecha_desde" value="{{ fecha_desde|default_if_none:'' }}"></label>
         <label>Hasta: <input type="date" name="fecha_hasta" value="{{ fecha_hasta|default_if_none:'' }}"></label>
-        <label>CategorÃ­as:
+        <label>Categorías:
             <select name="categoria" multiple>
                 {% for c in todas_categorias %}
-                <option value="{{ c }}">{{ c }}</option>
+                <option value="{{ c.pk }}">{{ c }}</option>
                 {% endfor %}
             </select>
         </label>
@@ -42,7 +42,7 @@
 <table>
     <thead>
         <tr>
-            <th>CategorÃ­a</th>
+            <th>Categoría</th>
             <th class="text-right">Total USD</th>
         </tr>
     </thead>
@@ -67,10 +67,10 @@
 <table>
     <thead>
         <tr>
-            <th>NÃºmero</th>
+            <th>Número</th>
             <th>Proveedor</th>
-            <th>CategorÃ­a</th>
-            <th>DescripciÃ³n</th>
+            <th>Categoría</th>
+            <th>Descripción</th>
             <th class="text-right">Monto Original</th>
             <th>Moneda</th>
             <th class="text-right">Equiv. USD</th>

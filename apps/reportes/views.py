@@ -68,10 +68,19 @@ def _monto_usd_gasto(gasto):
     return _monto_usd_linea(gasto.monto, gasto.moneda, gasto.tasa_cambio)
 
 
+def _cobro_monto_usd(cobro):
+    """Devuelve el monto en USD de un cobro. Usa monto_usd si ya fue calculado,
+    si no convierte monto/tasa_cambio (cobros VES sin cuenta_destino)."""
+    monto_usd = _decimal(cobro.monto_usd)
+    if monto_usd > Decimal("0"):
+        return monto_usd
+    return _monto_usd_linea(cobro.monto, cobro.moneda, cobro.tasa_cambio)
+
+
 def _resumen_factura_venta(factura, hasta=None):
     total = _quantize_money(factura.total)
     cobrado = sum(
-        (_decimal(cobro.monto) for cobro in factura.cobros.all() if not hasta or cobro.fecha <= hasta),
+        (_cobro_monto_usd(cobro) for cobro in factura.cobros.all() if not hasta or cobro.fecha <= hasta),
         Decimal("0.00"),
     )
     nc_emitidas = sum(
@@ -91,13 +100,22 @@ def _resumen_factura_venta(factura, hasta=None):
     }
 
 
+def _pago_monto_usd(pago):
+    """Devuelve el monto en USD de un pago. Usa monto_usd si ya fue calculado,
+    si no convierte monto/tasa_cambio (pagos VES sin cuenta_origen)."""
+    monto_usd = _decimal(pago.monto_usd)
+    if monto_usd > Decimal("0"):
+        return monto_usd
+    return _monto_usd_linea(pago.monto, pago.moneda, pago.tasa_cambio)
+
+
 def _resumen_factura_compra(factura, hasta=None):
     total = _quantize_money(factura.total)
     pagado_individual = sum(
         (
-            _decimal(pago.monto_usd)
+            _pago_monto_usd(pago)
             for pago in factura.pagos.all()
-            if (not hasta or pago.fecha <= hasta) and pago.monto_usd is not None
+            if not hasta or pago.fecha <= hasta
         ),
         Decimal("0.00"),
     )
@@ -925,8 +943,11 @@ def reporte_produccion(request):
     modo = request.GET.get("modo", "detallado")
     incluir_consumos = request.GET.get("incluir_consumos", "1") == "1"
     incluir_productos = request.GET.get("incluir_productos", "1") == "1"
+    estado_op = request.GET.get("estado_op", "CERRADA")
 
     qs = OrdenProduccion.objects.all()
+    if estado_op:
+        qs = qs.filter(estado=estado_op)
     if fecha_desde:
         qs = qs.filter(fecha_apertura__gte=fecha_desde)
     if fecha_hasta:
@@ -961,6 +982,7 @@ def reporte_produccion(request):
         "modo": modo,
         "incluir_consumos": incluir_consumos,
         "incluir_productos": incluir_productos,
+        "estado_op": estado_op,
     }
 
     ordenes = list(
@@ -1006,12 +1028,13 @@ def reporte_produccion(request):
         if incluir_productos:
             productos_consolidados = list(
                 SalidaOrden.objects.filter(orden__in=qs)
-                .values("producto__codigo", "producto__nombre", "producto__unidad_medida__simbolo")
+                .values("producto__codigo", "producto__nombre", "producto__unidad_medida__simbolo", "es_subproducto")
                 .annotate(total_cantidad=Sum("cantidad"), total_costo=Sum("costo_asignado"))
-                .order_by("producto__nombre")
+                .order_by("es_subproducto", "producto__nombre")
             )
             context["productos_consolidados"] = productos_consolidados
             context["total_kg_producidos"] = sum((p["total_cantidad"] or Decimal("0.00") for p in productos_consolidados), Decimal("0.00"))
+            context["total_productos_costo"] = sum((p["total_costo"] or Decimal("0.00") for p in productos_consolidados if not p["es_subproducto"]), Decimal("0.00"))
 
     if "exportar" in request.GET:
         columnas = [
